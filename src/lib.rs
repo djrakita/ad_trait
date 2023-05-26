@@ -8,7 +8,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, S
 use nalgebra::{DMatrix, DVector};
 use num_traits::{Float, Signed};
 use simba::scalar::ComplexField;
-use crate::forward_ad::adf::adf;
+
 
 pub trait AD :
     ComplexField +

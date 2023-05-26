@@ -4,7 +4,7 @@ use std::num::FpCategory;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use nalgebra::{Dim, Matrix, RawStorageMut};
-use num_traits::{Bounded, Float, FloatConst, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
+use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
 use crate::{AD, ADNumType, F64};
@@ -293,7 +293,7 @@ impl<const N: usize> Rem<Self> for adf<N> {
 
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
-        self - ComplexField::floor((self/rhs))*rhs
+        self - ComplexField::floor(self/rhs)*rhs
         // self - (self / rhs).floor() * rhs
     }
 }
@@ -517,7 +517,7 @@ impl<const N: usize> Float for adf<N> {
 }
 
 impl<const N: usize> NumCast for adf<N> {
-    fn from<T: ToPrimitive>(n: T) -> Option<Self> { unimplemented!() }
+    fn from<T: ToPrimitive>(_n: T) -> Option<Self> { unimplemented!() }
 }
 
 impl<const N: usize> ToPrimitive for adf<N> {
@@ -991,7 +991,7 @@ impl<const N: usize> ComplexField for adf<N> {
 
     #[inline]
     fn hypot(self, other: Self) -> Self::RealField {
-        return ComplexField::sqrt((ComplexField::powi(self, 2) + ComplexField::powi(other, 2)));
+        return ComplexField::sqrt(ComplexField::powi(self, 2) + ComplexField::powi(other, 2));
     }
 
     #[inline]

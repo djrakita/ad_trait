@@ -1,15 +1,15 @@
-use std::cell::RefCell;
+
 use once_cell::sync::OnceCell;
-use std::collections::HashMap;
-use std::sync::{Mutex, RwLock};
-use rand::{Rng, thread_rng};
+
+use std::sync::{RwLock};
+
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::num::FpCategory;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use nalgebra::{Dim, Matrix, RawStorageMut};
-use num_traits::{Bounded, Float, FloatConst, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
+use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
 use tinyvec::{TinyVec, tiny_vec};
@@ -51,7 +51,7 @@ impl adr {
         let mut adjoints = vec![0.0; l];
         adjoints[self.node_idx] = 1.0;
 
-        'l: for node_idx in (0..l).rev() {
+        for node_idx in (0..l).rev() {
             let node = &nodes[node_idx];
             let parent_adjoints = node.node_type.get_derivatives_wrt_parents(node.parent_0, node.parent_1);
             if parent_adjoints.len() == 1 {
@@ -176,6 +176,7 @@ impl ComputationGraph {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct ComputationGraphNode {
     node_idx: usize,
@@ -265,14 +266,14 @@ impl NodeType {
             NodeType::Sin => { tiny_vec!([f64; 2] => ComplexField::cos(parent_0.unwrap())) }
             NodeType::Cos => { tiny_vec!([f64; 2] => ComplexField::sin(-parent_0.unwrap())) }
             NodeType::Tan => {
-                let c = ComplexField::cos(parent_1.unwrap());
+                let c = ComplexField::cos(parent_0.unwrap());
                 tiny_vec!([f64; 2] => 1.0 / (c*c))
             }
             NodeType::Asin => {
-                tiny_vec!([f64; 2] => 1.0 / ComplexField::sqrt((1.0 - parent_0.unwrap() * parent_0.unwrap())))
+                tiny_vec!([f64; 2] => 1.0 / ComplexField::sqrt(1.0 - parent_0.unwrap() * parent_0.unwrap()))
             }
             NodeType::Acos => {
-                tiny_vec!([f64; 2] => -1.0/ComplexField::sqrt((1.0 - parent_0.unwrap() * parent_0.unwrap())))
+                tiny_vec!([f64; 2] => -1.0/ComplexField::sqrt(1.0 - parent_0.unwrap() * parent_0.unwrap()))
             }
             NodeType::Atan => {
                 tiny_vec!([f64; 2] => 1.0/(parent_0.unwrap()*parent_0.unwrap() + 1.0))
@@ -285,11 +286,11 @@ impl NodeType {
             }
             NodeType::Asinh => {
                 let lhs = parent_0.unwrap();
-                tiny_vec!([f64; 2] => ComplexField::cosh(parent_0.unwrap()))
+                tiny_vec!([f64; 2] => 1.0/(lhs*lhs + 1.0).sqrt())
             }
             NodeType::Acosh => {
                 let lhs = parent_0.unwrap();
-                tiny_vec!([f64; 2] => 1.0/(ComplexField::sqrt((lhs - 1.0))*ComplexField::sqrt((lhs + 1.0))) )
+                tiny_vec!([f64; 2] => 1.0/(ComplexField::sqrt(lhs - 1.0)*ComplexField::sqrt(lhs + 1.0)) )
             }
             NodeType::Atanh => {
                 let lhs = parent_0.unwrap();
@@ -488,7 +489,7 @@ impl Rem<Self> for adr {
 
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
-        self - ComplexField::floor((self/rhs))*rhs
+        self - ComplexField::floor(self/rhs)*rhs
     }
 }
 impl RemAssign<Self> for adr {
@@ -709,7 +710,7 @@ impl Float for adr {
 }
 
 impl NumCast for adr {
-    fn from<T: ToPrimitive>(n: T) -> Option<Self> { unimplemented!() }
+    fn from<T: ToPrimitive>(_n: T) -> Option<Self> { unimplemented!() }
 }
 
 impl ToPrimitive for adr {
@@ -1161,7 +1162,7 @@ impl ComplexField for adr {
 
     #[inline]
     fn hypot(self, other: Self) -> Self::RealField {
-        return ComplexField::sqrt((ComplexField::powi(self, 2) + ComplexField::powi(other, 2)));
+        return ComplexField::sqrt(ComplexField::powi(self, 2) + ComplexField::powi(other, 2));
     }
 
     #[inline]
