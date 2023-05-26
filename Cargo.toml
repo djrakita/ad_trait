@@ -6,6 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = "0.32.2"
-num-traits = "0.2.15"
-simba = "0.7.2"
+nalgebra = "*"
+num-traits = "*"
+simba= { version = "*" }
+approx = "*"
+rand = "*"
+once_cell = "*"
+wide = "*"
+tinyvec = {version = "*", features = ['alloc'] }
+
+[profile.dev]
+opt-level = 3
+lto = "thin"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
