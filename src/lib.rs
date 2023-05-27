@@ -1,3 +1,4 @@
+extern crate core;
 
 pub mod forward_ad;
 pub mod reverse_ad;

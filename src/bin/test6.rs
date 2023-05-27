@@ -12,7 +12,7 @@ fn main() {
     let res = (a).powf(b);
     println!("{:?}", res);
 
-    let a = adr::new(1.1, true);
+    let a = adr::new_variable(1.1, true);
     let b = adr::constant(2.0);
     let _c = adr::constant(3.0);
 

@@ -533,12 +533,14 @@ impl<const N: usize> ToPrimitive for adf<N> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl<const N: usize>  PartialEq for adf<N> {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 
 impl<const N: usize>  PartialOrd for adf<N> {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.value.partial_cmp(&other.value)
     }

@@ -1,4 +1,3 @@
-
 use once_cell::sync::OnceCell;
 
 use std::sync::{RwLock};
@@ -18,12 +17,13 @@ use crate::{AD, ADNumType, F64};
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy)]
 pub struct adr {
-    node_idx: usize,
+    value: f64,
+    node_idx: NodeIdx,
     computation_graph: &'static ComputationGraph
 }
 impl Debug for adr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("adr2{ ").expect("error");
+        f.write_str("adr { ").expect("error");
         f.write_str(&format!("value: {:?}, ", self.value())).expect("error");
         f.write_str(&format!("node_idx: {:?}", self.node_idx)).expect("error");
         f.write_str(" }").expect("error");
@@ -37,30 +37,42 @@ impl Default for adr {
     }
 }
 impl adr {
-    pub fn new(value: f64, reset_computation_graph: bool) -> Self {
+    pub fn new_variable(value: f64, reset_computation_graph: bool) -> Self {
         if reset_computation_graph { GlobalComputationGraph::get().reset(); }
         GlobalComputationGraph::get().spawn_value(value)
     }
     #[inline]
     pub fn value(&self) -> f64 {
-        self.computation_graph.nodes.read().expect("error")[self.node_idx].value
+        self.value
     }
     pub fn get_backwards_mode_grad(&self) -> BackwardsModeGradOutput {
         let nodes = self.computation_graph.nodes.read().unwrap();
         let l = nodes.len();
         let mut adjoints = vec![0.0; l];
-        adjoints[self.node_idx] = 1.0;
+        match self.node_idx {
+            NodeIdx::Constant => { panic!("cannot get backwards mode grad on a constant.") }
+            NodeIdx::Idx(node_idx) => { adjoints[node_idx] = 1.0; }
+        }
 
         for node_idx in (0..l).rev() {
             let node = &nodes[node_idx];
             let parent_adjoints = node.node_type.get_derivatives_wrt_parents(node.parent_0, node.parent_1);
             if parent_adjoints.len() == 1 {
                 let curr_adjoint = adjoints[node_idx];
-                adjoints[node.parent_0_idx.unwrap()] += curr_adjoint * parent_adjoints[0];
+                let parent_0_idx = node.parent_0_idx.unwrap();
+                if parent_0_idx != NodeIdx::Constant {
+                    adjoints[parent_0_idx.get_idx()] += curr_adjoint * parent_adjoints[0];
+                }
             } else if parent_adjoints.len() == 2 {
                 let curr_adjoint = adjoints[node_idx];
-                adjoints[node.parent_0_idx.unwrap()] += curr_adjoint * parent_adjoints[0];
-                adjoints[node.parent_1_idx.unwrap()] += curr_adjoint * parent_adjoints[1];
+                let parent_0_idx = node.parent_0_idx.unwrap();
+                let parent_1_idx = node.parent_1_idx.unwrap();
+                if parent_0_idx != NodeIdx::Constant  {
+                    adjoints[parent_0_idx.get_idx()] += curr_adjoint * parent_adjoints[0];
+                }
+                if parent_1_idx != NodeIdx::Constant  {
+                    adjoints[parent_1_idx.get_idx()] += curr_adjoint * parent_adjoints[1];
+                }
             }
         }
 
@@ -76,13 +88,19 @@ pub struct BackwardsModeGradOutput {
 }
 impl BackwardsModeGradOutput {
     pub fn wrt(&self, v: &adr) -> f64 {
-        self.adjoints[v.node_idx]
+        self.adjoints[v.node_idx.get_idx()]
     }
 }
 
 impl AD for adr {
     fn constant(constant: f64) -> Self {
-        Self::new(constant, false)
+        return unsafe {
+            adr {
+                value: constant,
+                node_idx: NodeIdx::Constant,
+                computation_graph: &*GlobalComputationGraph::get().0
+            }
+        }
     }
 
     fn to_constant(&self) -> f64 {
@@ -153,11 +171,32 @@ impl ComputationGraph {
         };
         nodes.push(node);
         adr {
-            node_idx,
+            value,
+            node_idx: NodeIdx::Idx(node_idx),
             computation_graph: self
         }
     }
-    fn add_node(&'static self, node_type: NodeType, value: f64, parent_0: Option<f64>, parent_1: Option<f64>, parent_0_idx: Option<usize>, parent_1_idx: Option<usize>) -> adr {
+    fn add_node(&'static self, node_type: NodeType, value: f64, parent_0: Option<f64>, parent_1: Option<f64>, parent_0_idx: Option<NodeIdx>, parent_1_idx: Option<NodeIdx>) -> adr {
+        if parent_0_idx.is_some() {
+            if parent_1_idx.is_some() {
+                if parent_0_idx.unwrap() == NodeIdx::Constant && parent_1_idx.unwrap() == NodeIdx::Constant {
+                    return adr {
+                        value,
+                        node_idx: NodeIdx::Constant,
+                        computation_graph: self,
+                    }
+                }
+            } else {
+                if parent_0_idx.unwrap() == NodeIdx::Constant {
+                    return adr {
+                        value,
+                        node_idx: NodeIdx::Constant,
+                        computation_graph: self
+                    }
+                }
+            }
+        }
+
         let mut nodes = self.nodes.write().expect("error");
         let node_idx = nodes.len();
         nodes.push( ComputationGraphNode {
@@ -169,8 +208,10 @@ impl ComputationGraph {
             parent_0_idx,
             parent_1_idx
         } );
+
         adr {
-            node_idx,
+            value,
+            node_idx: NodeIdx::Idx(node_idx),
             computation_graph: self
         }
     }
@@ -184,8 +225,8 @@ pub struct ComputationGraphNode {
     value: f64,
     parent_0: Option<f64>,
     parent_1: Option<f64>,
-    parent_0_idx: Option<usize>,
-    parent_1_idx: Option<usize>
+    parent_0_idx: Option<NodeIdx>,
+    parent_1_idx: Option<NodeIdx>
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -316,6 +357,21 @@ impl NodeType {
                 tiny_vec!([f64; 2] => rhs * ComplexField::powf(lhs, rhs - 1.0), ComplexField::powf(lhs, rhs) * ComplexField::ln(lhs))
             }
         };
+    }
+}
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub enum NodeIdx {
+    Constant,
+    Idx(usize)
+}
+impl NodeIdx {
+    #[inline]
+    pub fn get_idx(&self) -> usize {
+        match self {
+            NodeIdx::Constant => { panic!("cannot get idx from constant.") }
+            NodeIdx::Idx(idx) => { return *idx }
+        }
     }
 }
 
@@ -726,12 +782,14 @@ impl ToPrimitive for adr {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl PartialEq for adr {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.value() == other.value()
     }
 }
 
 impl PartialOrd for adr {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.value().partial_cmp(&other.value())
     }
