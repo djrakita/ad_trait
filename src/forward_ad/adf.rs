@@ -7,7 +7,7 @@ use nalgebra::{Dim, Matrix, RawStorageMut};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-use crate::{AD, ADNumType, F64};
+use crate::{AD, F64};
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy)]
@@ -48,10 +48,6 @@ impl<const N: usize> AD for adf<N> {
 
     fn to_constant(&self) -> f64 {
         self.value
-    }
-
-    fn ad_num_type() -> ADNumType {
-        ADNumType::ADF
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {
@@ -318,6 +314,7 @@ impl<const N: usize> Neg for adf<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 impl<const N: usize> Float for adf<N> {
     fn nan() -> Self {
         Self::constant(f64::NAN)
@@ -529,6 +526,7 @@ impl<const N: usize> ToPrimitive for adf<N> {
         self.value.to_u64()
     }
 }
+*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

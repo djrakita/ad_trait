@@ -7,7 +7,7 @@ use nalgebra::{Dim, Matrix, RawStorageMut};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-use crate::{AD, ADNumType, F64};
+use crate::{AD, F64};
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy)]
@@ -50,11 +50,6 @@ impl<const N: usize> AD for f64xn<N> {
 
     fn to_constant(&self) -> f64 {
         panic!("f64xn not compatible with to_constant")
-    }
-
-    fn ad_num_type() -> ADNumType {
-        todo!()
-        // ADNumType::f64xn
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {
@@ -292,6 +287,7 @@ impl<const N: usize> Neg for f64xn<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 impl<const N: usize> Float for f64xn<N> {
     fn nan() -> Self {
         Self::constant(f64::NAN)
@@ -545,6 +541,7 @@ impl<const N: usize> ToPrimitive for f64xn<N> {
         None
     }
 }
+*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1214,7 +1211,17 @@ impl<const N: usize> ComplexField for f64xn<N> {
     #[inline]
     fn cbrt(self) -> Self { return ComplexField::powf(self, Self::constant(1.0 / 3.0)); }
 
-    fn is_finite(&self) -> bool { return <Self as Float>::is_finite(*self) }
+    fn is_finite(&self) -> bool {
+        let initial = self.value[0].is_finite();
+        if N > 1 {
+            for i in 1..N {
+                if (self.value[i].is_finite()) != initial {
+                    panic!("is_finite is not consistent for f64xn.")
+                }
+            }
+        }
+        initial
+    }
 
     fn try_sqrt(self) -> Option<Self> {
         Some(ComplexField::sqrt(self))

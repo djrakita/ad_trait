@@ -1,5 +1,6 @@
 extern crate core;
 
+pub mod differentiable_block;
 pub mod forward_ad;
 pub mod reverse_ad;
 pub mod simd;
@@ -16,7 +17,7 @@ pub trait AD :
     PartialOrd +
     PartialEq +
     Signed +
-    Float +
+    // Float +
     Clone +
     Copy +
     Debug +
@@ -35,7 +36,7 @@ pub trait AD :
 {
     fn constant(constant: f64) -> Self;
     fn to_constant(&self) -> f64;
-    fn ad_num_type() -> ADNumType;
+    // fn ad_num_type() -> ADNumType;
     fn add_scalar(arg1: f64, arg2: Self) -> Self;
     fn sub_l_scalar(arg1: f64, arg2: Self) -> Self;
     fn sub_r_scalar(arg1: Self, arg2: f64) -> Self;
@@ -51,20 +52,11 @@ macro_rules! ad_setup {
     ($($T: ident),*) => {
         $(
         ad_setup_f64!($T);
-        ad_setup_any_nalgebra_dmatrix!($T);
+        // ad_setup_any_nalgebra_dmatrix!($T);
         )*
     }
 }
 ad_setup!(f64, f32);
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-pub enum ADNumType {
-    F64,
-    F32,
-    ADF,
-    ADR
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -75,10 +67,6 @@ impl AD for f64 {
 
         fn to_constant(&self) -> f64 {
             *self
-        }
-
-        fn ad_num_type() -> ADNumType {
-            ADNumType::F64
         }
 
         fn add_scalar(arg1: f64, arg2: Self) -> Self {
@@ -121,10 +109,6 @@ impl AD for f32 {
 
         fn to_constant(&self) -> f64 {
             *self as f64
-        }
-
-        fn ad_num_type() -> ADNumType {
-            ADNumType::F32
         }
 
         fn add_scalar(arg1: f64, arg2: Self) -> Self {
@@ -289,6 +273,7 @@ macro_rules! ad_setup_f64 {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/*
 pub struct ADAnyNalgebraDMatrix {
     pub (crate) f64: DMatrix<f64>,
     pub (crate) f32: DMatrix<f32>
@@ -413,6 +398,7 @@ macro_rules! ad_setup_any_nalgebra_dmatrix {
         )*
     }
 }
+*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

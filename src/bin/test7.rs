@@ -40,8 +40,8 @@ fn main() {
 
     println!("{}", a1.m * a2.m);
 
-    let a1 = A::<f64xn<12>>::new();
-    let a2 = A::<f64xn<12>>::new();
+    let a1 = A::<f64xn<16>>::new();
+    let a2 = A::<f64xn<16>>::new();
 
     println!("{}", a1.m * a2.m);
 }
