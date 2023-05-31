@@ -8,26 +8,26 @@ use faer_core::pulp::Simd;
 use nalgebra::{Dim, Matrix, RawStorageMut};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
-use simba::simd::{PrimitiveSimdValue, SimdValue};
+use simba::simd::{f32x16, PrimitiveSimdValue, SimdValue};
 use crate::{AD, F64};
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy)]
-pub struct adf<const N: usize> {
+pub struct adf2 {
     pub (crate) value: f64,
-    pub (crate) tangent: [f64; N]
+    pub (crate) tangent: f32x16
 }
-impl<const N: usize> adf<N> {
-    pub fn new(value: f64, tangent: [f64; N]) -> Self {
+impl adf2 {
+    pub fn new(value: f64, tangent: f32x16) -> Self {
         Self {
             value,
             tangent
         }
     }
-    pub fn new_constant(value: f64) -> Self {
+    pub fn constant(value: f64) -> Self {
         Self {
             value,
-            tangent: [0.0; N]
+            tangent: f32x16::zero()
         }
     }
     #[inline]
@@ -35,16 +35,16 @@ impl<const N: usize> adf<N> {
         self.value
     }
     #[inline]
-    pub fn tangent(&self) -> [f64; N] {
+    pub fn tangent(&self) -> f32x16 {
         self.tangent
     }
 }
 
-impl<const N: usize> AD for adf<N> {
+impl AD for adf2 {
     fn constant(constant: f64) -> Self {
         Self {
             value: constant,
-            tangent: [0.0; N]
+            tangent: f32x16::zero()
         }
     }
 
@@ -87,34 +87,7 @@ impl<const N: usize> AD for adf<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#[inline(always)]
-fn two_vecs_mul_and_add<const N: usize>(vec1: &[f64; N], vec2: &[f64; N], scalar1: f64, scalar2: f64) -> [f64; N] {
-    let mut out = [0.0; N];
-    for i in 0..N {
-        out[i] = scalar1*vec1[i] + scalar2*vec2[i];
-    }
-    out
-}
-#[inline(always)]
-fn two_vecs_add<const N: usize>(vec1: &[f64; N], vec2: &[f64; N]) -> [f64; N] {
-    let mut out = [0.0; N];
-    for i in 0..N {
-        out[i] = vec1[i] + vec2[i];
-    }
-    out
-}
-#[inline(always)]
-fn one_vec_mul<const N: usize>(vec: &[f64; N], scalar: f64) -> [f64; N] {
-    let mut out = [0.0; N];
-    for i in 0..N {
-        out[i] = scalar*vec[i];
-    }
-    out
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-impl<const N: usize> Add<F64> for adf<N> {
+impl Add<F64> for adf2 {
     type Output = Self;
 
     #[inline]
@@ -123,14 +96,14 @@ impl<const N: usize> Add<F64> for adf<N> {
     }
 }
 
-impl<const N: usize> AddAssign<F64> for adf<N> {
+impl AddAssign<F64> for adf2 {
     #[inline]
     fn add_assign(&mut self, rhs: F64) {
         *self = *self + rhs;
     }
 }
 
-impl<const N: usize> Mul<F64> for adf<N> {
+impl Mul<F64> for adf2 {
     type Output = Self;
 
     #[inline]
@@ -139,14 +112,14 @@ impl<const N: usize> Mul<F64> for adf<N> {
     }
 }
 
-impl<const N: usize> MulAssign<F64> for adf<N> {
+impl MulAssign<F64> for adf2 {
     #[inline]
     fn mul_assign(&mut self, rhs: F64) {
         *self = *self * rhs;
     }
 }
 
-impl<const N: usize> Sub<F64> for adf<N> {
+impl Sub<F64> for adf2 {
     type Output = Self;
 
     #[inline]
@@ -155,14 +128,14 @@ impl<const N: usize> Sub<F64> for adf<N> {
     }
 }
 
-impl<const N: usize> SubAssign<F64> for adf<N> {
+impl SubAssign<F64> for adf2 {
     #[inline]
     fn sub_assign(&mut self, rhs: F64) {
         *self = *self - rhs;
     }
 }
 
-impl<const N: usize> Div<F64> for adf<N> {
+impl Div<F64> for adf2 {
     type Output = Self;
 
     #[inline]
@@ -171,14 +144,14 @@ impl<const N: usize> Div<F64> for adf<N> {
     }
 }
 
-impl<const N: usize> DivAssign<F64> for adf<N> {
+impl DivAssign<F64> for adf2 {
     #[inline]
     fn div_assign(&mut self, rhs: F64) {
         *self = *self / rhs;
     }
 }
 
-impl<const N: usize> Rem<F64> for adf<N> {
+impl Rem<F64> for adf2 {
     type Output = Self;
 
     #[inline]
@@ -187,7 +160,7 @@ impl<const N: usize> Rem<F64> for adf<N> {
     }
 }
 
-impl<const N: usize> RemAssign<F64> for  adf<N> {
+impl RemAssign<F64> for  adf2 {
     #[inline]
     fn rem_assign(&mut self, rhs: F64) {
         *self = *self % rhs;
@@ -196,13 +169,13 @@ impl<const N: usize> RemAssign<F64> for  adf<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> Add<Self> for adf<N> {
+impl Add<Self> for adf2 {
     type Output = Self;
 
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
         let output_value = self.value + rhs.value;
-        let output_tangent = two_vecs_add(&self.tangent, &rhs.tangent);
+        let output_tangent = self.tangent + rhs.tangent;
 
         Self {
             value: output_value,
@@ -211,43 +184,40 @@ impl<const N: usize> Add<Self> for adf<N> {
 
     }
 }
-impl<const N: usize> AddAssign<Self> for adf<N> {
+impl AddAssign<Self> for adf2 {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
     }
 }
 
-impl<const N: usize> Mul<Self> for adf<N> {
+impl Mul<Self> for adf2 {
     type Output = Self;
 
-        #[inline]
+    #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let output_value = self.value * rhs.value;
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &rhs.tangent, rhs.value, self.value);
-
+        let output_tangent = f32x16::splat(rhs.value as f32)*self.tangent + f32x16::splat(self.value as f32)*rhs.tangent;
         Self {
             value: output_value,
             tangent: output_tangent
         }
-
     }
 }
-impl<const N: usize> MulAssign<Self> for adf<N> {
+impl MulAssign<Self> for adf2 {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs;
     }
 }
 
-impl<const N: usize> Sub<Self> for adf<N> {
+impl Sub<Self> for adf2 {
     type Output = Self;
 
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
         let output_value = self.value - rhs.value;
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &rhs.tangent, 1.0, -1.0);
-
+        let output_tangent = self.tangent + -f32x16::one()*rhs.tangent;
         Self {
             value: output_value,
             tangent: output_tangent
@@ -255,22 +225,22 @@ impl<const N: usize> Sub<Self> for adf<N> {
 
     }
 }
-impl<const N: usize> SubAssign<Self> for adf<N> {
+impl SubAssign<Self> for adf2 {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         *self = *self - rhs;
     }
 }
 
-impl<const N: usize> Div<Self> for adf<N> {
+impl Div<Self> for adf2 {
     type Output = Self;
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
         let output_value = self.value / rhs.value;
-        let d_div_d_arg1 = 1.0/rhs.value;
-        let d_div_d_arg2 = -self.value/(rhs.value*rhs.value);
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &rhs.tangent, d_div_d_arg1, d_div_d_arg2);
+        let d_div_d_arg1 = (1.0/rhs.value) as f32;
+        let d_div_d_arg2 = (-self.value/(rhs.value*rhs.value)) as f32;
+        let output_tangent = f32x16::splat(d_div_d_arg1)*self.tangent + f32x16::splat(d_div_d_arg2)*rhs.tangent;
 
         Self {
             value: output_value,
@@ -279,37 +249,38 @@ impl<const N: usize> Div<Self> for adf<N> {
 
     }
 }
-impl<const N: usize> DivAssign<Self> for adf<N> {
+impl DivAssign<Self> for adf2 {
     #[inline]
     fn div_assign(&mut self, rhs: Self) {
         *self = *self / rhs;
     }
 }
 
-impl<const N: usize> Rem<Self> for adf<N> {
+impl Rem<Self> for adf2 {
     type Output = Self;
 
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
-        self - ComplexField::floor(self/rhs)*rhs
+        todo!()
+        // self - ComplexField::floor(self/rhs)*rhs
         // self - (self / rhs).floor() * rhs
     }
 }
-impl<const N: usize> RemAssign<Self> for adf<N> {
+impl RemAssign<Self> for adf2 {
     #[inline]
     fn rem_assign(&mut self, rhs: Self) {
         *self = *self % rhs;
     }
 }
 
-impl<const N: usize> Neg for adf<N> {
+impl Neg for adf2 {
     type Output = Self;
 
     #[inline]
     fn neg(self) -> Self::Output {
         Self {
             value: -self.value,
-            tangent: one_vec_mul(&self.tangent, -1.0)
+            tangent: -f32x16::one()*self.tangent
         }
     }
 }
@@ -317,7 +288,7 @@ impl<const N: usize> Neg for adf<N> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
-impl<const N: usize> Float for adf<N> {
+impl Float for adf2 {
     fn nan() -> Self {
         Self::constant(f64::NAN)
     }
@@ -515,11 +486,11 @@ impl<const N: usize> Float for adf<N> {
     fn integer_decode(self) -> (u64, i16, i8) { return self.value.integer_decode() }
 }
 
-impl<const N: usize> NumCast for adf<N> {
+impl NumCast for adf2 {
     fn from<T: ToPrimitive>(_n: T) -> Option<Self> { unimplemented!() }
 }
 
-impl<const N: usize> ToPrimitive for adf<N> {
+impl ToPrimitive for adf2 {
     fn to_i64(&self) -> Option<i64> {
         self.value.to_i64()
     }
@@ -532,43 +503,43 @@ impl<const N: usize> ToPrimitive for adf<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize>  PartialEq for adf<N> {
+impl  PartialEq for adf2 {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
     }
 }
 
-impl<const N: usize>  PartialOrd for adf<N> {
+impl  PartialOrd for adf2 {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.value.partial_cmp(&other.value)
     }
 }
 
-impl<const N: usize>  Display for adf<N> {
+impl  Display for adf2 {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         f.write_str(&format!("{:?}", self)).expect("error");
         Ok(())
     }
 }
 
-impl<const N: usize>  From<f64> for adf<N> {
+impl  From<f64> for adf2 {
     fn from(value: f64) -> Self {
-        Self::new(value, [0.0; N])
+        Self::new(value, f32x16::splat(0.0))
     }
 }
-impl<const N: usize>  Into<f64> for adf<N> {
+impl  Into<f64> for adf2 {
     fn into(self) -> f64 {
         self.value
     }
 }
-impl<const N: usize>  From<f32> for adf<N> {
+impl  From<f32> for adf2 {
     fn from(value: f32) -> Self {
-        Self::new(value as f64, [0.0; N])
+        Self::new(value as f64, f32x16::splat(0.0))
     }
 }
-impl<const N: usize>  Into<f32> for adf<N> {
+impl  Into<f32> for adf2 {
     fn into(self) -> f32 {
         self.value as f32
     }
@@ -576,7 +547,7 @@ impl<const N: usize>  Into<f32> for adf<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize>  UlpsEq for adf<N> {
+impl  UlpsEq for adf2 {
     fn default_max_ulps() -> u32 {
         unimplemented!("take the time to figure this out.")
     }
@@ -586,7 +557,7 @@ impl<const N: usize>  UlpsEq for adf<N> {
     }
 }
 
-impl<const N: usize>  AbsDiffEq for adf<N> {
+impl  AbsDiffEq for adf2 {
     type Epsilon = Self;
 
     fn default_epsilon() -> Self::Epsilon {
@@ -595,7 +566,7 @@ impl<const N: usize>  AbsDiffEq for adf<N> {
 
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
         let diff = *self - *other;
-        if ComplexField::abs(diff) < epsilon {
+        if diff.value < epsilon.value {
             true
         } else {
             false
@@ -603,14 +574,14 @@ impl<const N: usize>  AbsDiffEq for adf<N> {
     }
 }
 
-impl<const N: usize>  RelativeEq for adf<N> {
+impl  RelativeEq for adf2 {
     fn default_max_relative() -> Self::Epsilon {
         Self::constant(0.000000001)
     }
 
     fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, _max_relative: Self::Epsilon) -> bool {
         let diff = *self - *other;
-        if ComplexField::abs(diff) < epsilon {
+        if diff.value < epsilon.value {
             true
         } else {
             false
@@ -620,7 +591,7 @@ impl<const N: usize>  RelativeEq for adf<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> SimdValue for adf<N> {
+impl SimdValue for adf2 {
     type Element = Self;
     type SimdBool = bool;
 
@@ -655,7 +626,7 @@ impl<const N: usize> SimdValue for adf<N> {
     }
 }
 
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adf<N>, R, C>> Mul<Matrix<adf<N>, R, C, S>> for adf<N> {
+impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adf2, R, C>> Mul<Matrix<adf2, R, C, S>> for adf2 {
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: Matrix<Self, R, C, S>) -> Self::Output {
@@ -668,7 +639,7 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<ad
 }
 
 /*
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<Matrix<f64, R, C, S>> for adf<N> {
+impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<Matrix<f64, R, C, S>> for adf2 {
     type Output = Matrix<f64, R, C, S>;
 
     fn mul(self, rhs: Matrix<f64, R, C, S>) -> Self::Output {
@@ -681,7 +652,7 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f6
 }
 */
 
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adf<N>, R, C>> Mul<&Matrix<adf<N>, R, C, S>> for adf<N> {
+impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adf2, R, C>> Mul<&Matrix<adf2, R, C, S>> for adf2 {
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: &Matrix<Self, R, C, S>) -> Self::Output {
@@ -709,7 +680,7 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> Zero for adf<N> {
+impl Zero for adf2 {
     #[inline(always)]
     fn zero() -> Self {
         return Self::constant(0.0)
@@ -720,14 +691,14 @@ impl<const N: usize> Zero for adf<N> {
     }
 }
 
-impl<const N: usize> One for adf<N> {
+impl One for adf2 {
     #[inline(always)]
     fn one() -> Self {
         Self::constant(1.0)
     }
 }
 
-impl<const N: usize> Num for adf<N> {
+impl Num for adf2 {
     type FromStrRadixErr = ();
 
     fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
@@ -736,7 +707,7 @@ impl<const N: usize> Num for adf<N> {
     }
 }
 
-impl<const N: usize> Signed for adf<N> {
+impl Signed for adf2 {
 
     #[inline]
     fn abs(&self) -> Self {
@@ -744,9 +715,10 @@ impl<const N: usize> Signed for adf<N> {
         let output_tangent = if self.value >= 0.0 {
             self.tangent
         } else {
-            one_vec_mul(&self.tangent, -1.0)
+            // one_vec_mul(&self.tangent, -1.0)
+            -f32x16::one()*self.tangent
         };
-        
+
         Self {
             value: output_value,
             tangent: output_tangent
@@ -765,7 +737,7 @@ impl<const N: usize> Signed for adf<N> {
     #[inline]
     fn signum(&self) -> Self {
         let output_value = self.value.signum();
-        let output_tangent = [0.0; N];
+        let output_tangent = f32x16::zero();
         Self {
             value: output_value,
             tangent: output_tangent
@@ -781,7 +753,7 @@ impl<const N: usize> Signed for adf<N> {
     }
 }
 
-impl<const N: usize> FromPrimitive for adf<N> {
+impl FromPrimitive for adf2 {
     fn from_i64(n: i64) -> Option<Self> {
         Some(Self::constant(n as f64))
     }
@@ -791,7 +763,7 @@ impl<const N: usize> FromPrimitive for adf<N> {
     }
 }
 
-impl<const N: usize> Bounded for adf<N> {
+impl Bounded for adf2 {
     fn min_value() -> Self {
         Self::constant(f64::MIN)
     }
@@ -803,7 +775,7 @@ impl<const N: usize> Bounded for adf<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> RealField for adf<N> {
+impl RealField for adf2 {
     fn is_sign_positive(&self) -> bool {
         return self.is_positive();
     }
@@ -857,9 +829,9 @@ impl<const N: usize> RealField for adf<N> {
     #[inline]
     fn atan2(self, other: Self) -> Self {
         let output_value = self.value.atan2(other.value);
-        let d_atan2_d_arg1 = other.value/(self.value*self.value + other.value*other.value);
-        let d_atan2_d_arg2 = -self.value/(self.value*self.value + other.value*other.value);
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &other.tangent, d_atan2_d_arg1, d_atan2_d_arg2);
+        let d_atan2_d_arg1 = (other.value/(self.value*self.value + other.value*other.value)) as f32;
+        let d_atan2_d_arg2 = (-self.value/(self.value*self.value + other.value*other.value)) as f32;
+        let output_tangent = f32x16::splat(d_atan2_d_arg1)*self.tangent + f32x16::splat(d_atan2_d_arg2)*other.tangent;
 
         Self {
             value: output_value,
@@ -936,7 +908,7 @@ impl<const N: usize> RealField for adf<N> {
     }
 }
 
-impl<const N: usize> ComplexField for adf<N> {
+impl ComplexField for adf2 {
     type RealField = Self;
 
     fn from_real(re: Self::RealField) -> Self { re.clone() }
@@ -962,26 +934,26 @@ impl<const N: usize> ComplexField for adf<N> {
 
     #[inline]
     fn floor(self) -> Self {
-        Self::new(self.value.floor(), [0.0; N])
+        Self::new(self.value.floor(), f32x16::zero())
     }
 
     #[inline]
     fn ceil(self) -> Self {
-        Self::new(self.value.ceil(), [0.0; N])
+        Self::new(self.value.ceil(), f32x16::zero())
     }
 
     #[inline]
     fn round(self) -> Self {
-        Self::new(self.value.round(), [0.0; N])
+        Self::new(self.value.round(), f32x16::zero())
     }
 
     #[inline]
     fn trunc(self) -> Self {
-        Self::new(self.value.trunc(), [0.0; N])
+        Self::new(self.value.trunc(), f32x16::zero())
     }
 
     #[inline]
-    fn fract(self) -> Self { Self::new(self.value.fract(), [0.0; N]) }
+    fn fract(self) -> Self { Self::new(self.value.fract(), f32x16::zero()) }
 
     #[inline]
     fn mul_add(self, a: Self, b: Self) -> Self { return (self * a) + b; }
@@ -1005,8 +977,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn sin(self) -> Self {
         let output_value = self.value.sin();
-        let d_sin_d_arg1 = self.value.cos();
-        let output_tangent = one_vec_mul(&self.tangent, d_sin_d_arg1);
+        let d_sin_d_arg1 = self.value.cos() as f32;
+        let output_tangent = f32x16::splat(d_sin_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1017,8 +989,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn cos(self) -> Self {
         let output_value = self.value.cos();
-        let d_cos_d_arg1 =  -self.value.sin();
-        let output_tangent = one_vec_mul(&self.tangent, d_cos_d_arg1);
+        let d_cos_d_arg1 =  (-self.value.sin()) as f32;
+        let output_tangent = f32x16::splat(d_cos_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1035,8 +1007,8 @@ impl<const N: usize> ComplexField for adf<N> {
     fn tan(self) -> Self {
         let output_value = self.value.tan();
         let c = self.value.cos();
-        let d_tan_d_arg1 =  1.0/(c*c);
-        let output_tangent = one_vec_mul(&self.tangent, d_tan_d_arg1);
+        let d_tan_d_arg1 =  (1.0/(c*c)) as f32;
+        let output_tangent = f32x16::splat(d_tan_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1047,8 +1019,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn asin(self) -> Self {
         let output_value = self.value.asin();
-        let d_asin_d_arg1 =  1.0 / (1.0 - self.value * self.value).sqrt();
-        let output_tangent = one_vec_mul(&self.tangent, d_asin_d_arg1);
+        let d_asin_d_arg1 =  (1.0 / (1.0 - self.value * self.value).sqrt()) as f32;
+        let output_tangent = f32x16::splat(d_asin_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1059,8 +1031,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn acos(self) -> Self {
         let output_value = self.value.acos();
-        let d_acos_d_arg1 =  -1.0 / (1.0 - self.value * self.value).sqrt();
-        let output_tangent = one_vec_mul(&self.tangent, d_acos_d_arg1);
+        let d_acos_d_arg1 =  (-1.0 / (1.0 - self.value * self.value).sqrt()) as f32;
+        let output_tangent = f32x16::splat(d_acos_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1071,8 +1043,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn atan(self) -> Self {
         let output_value = self.value.acos();
-        let d_atan_d_arg1 =  1.0 / (self.value * self.value + 1.0);
-        let output_tangent = one_vec_mul(&self.tangent, d_atan_d_arg1);
+        let d_atan_d_arg1 =  (1.0 / (self.value * self.value + 1.0)) as f32;
+        let output_tangent = f32x16::splat(d_atan_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1083,8 +1055,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn sinh(self) -> Self {
         let output_value = self.value.sinh();
-        let d_sinh_d_arg1 =  self.value.cosh();
-        let output_tangent = one_vec_mul(&self.tangent, d_sinh_d_arg1);
+        let d_sinh_d_arg1 =  self.value.cosh() as f32;
+        let output_tangent = f32x16::splat(d_sinh_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1095,8 +1067,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn cosh(self) -> Self {
         let output_value = self.value.cosh();
-        let d_cosh_d_arg1 =  self.value.sinh();
-        let output_tangent = one_vec_mul(&self.tangent, d_cosh_d_arg1);
+        let d_cosh_d_arg1 =  self.value.sinh() as f32;
+        let output_tangent = f32x16::splat(d_cosh_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1108,8 +1080,8 @@ impl<const N: usize> ComplexField for adf<N> {
     fn tanh(self) -> Self {
         let output_value = self.value.tanh();
         let c = self.value.cosh();
-        let d_tanh_d_arg1 =  1.0/(c*c);
-        let output_tangent = one_vec_mul(&self.tangent, d_tanh_d_arg1);
+        let d_tanh_d_arg1 =  (1.0/(c*c)) as f32;
+        let output_tangent = f32x16::splat(d_tanh_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1120,8 +1092,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn asinh(self) -> Self {
         let output_value = self.value.asinh();
-        let d_asinh_d_arg1 =  1.0/(self.value*self.value + 1.0).sqrt();
-        let output_tangent = one_vec_mul(&self.tangent, d_asinh_d_arg1);
+        let d_asinh_d_arg1 =  (1.0/(self.value*self.value + 1.0).sqrt()) as f32;
+        let output_tangent = f32x16::splat(d_asinh_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1132,8 +1104,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn acosh(self) -> Self {
         let output_value = self.value.acosh();
-        let d_acosh_d_arg1 =  1.0/((self.value - 1.0).sqrt()*(self.value + 1.0).sqrt());
-        let output_tangent = one_vec_mul(&self.tangent, d_acosh_d_arg1);
+        let d_acosh_d_arg1 =  (1.0/((self.value - 1.0).sqrt()*(self.value + 1.0).sqrt())) as f32;
+        let output_tangent = f32x16::splat(d_acosh_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1144,8 +1116,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn atanh(self) -> Self {
         let output_value = self.value.atanh();
-        let d_atanh_d_arg1 =  1.0/(1.0 - self.value*self.value);
-        let output_tangent = one_vec_mul(&self.tangent, d_atanh_d_arg1);
+        let d_atanh_d_arg1 =  (1.0/(1.0 - self.value*self.value)) as f32;
+        let output_tangent = f32x16::splat(d_atanh_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1158,9 +1130,9 @@ impl<const N: usize> ComplexField for adf<N> {
         let output_value = self.value.log(base.value);
         let ln_rhs = base.value.ln();
         let ln_lhs = self.value.ln();
-        let d_log_d_arg1 = 1.0/(self.value * ln_rhs);
-        let d_log_d_arg2 = -ln_lhs / (base.value * ln_rhs * ln_rhs);
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &base.tangent, d_log_d_arg1, d_log_d_arg2);
+        let d_log_d_arg1 = (1.0/(self.value * ln_rhs)) as f32;
+        let d_log_d_arg2 = (-ln_lhs / (base.value * ln_rhs * ln_rhs)) as f32;
+        let output_tangent = f32x16::splat(d_log_d_arg1)*self.tangent + f32x16::splat(d_log_d_arg2)*base.tangent ;
 
         Self {
             value: output_value,
@@ -1183,8 +1155,8 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn sqrt(self) -> Self {
         let output_value = self.value.sqrt();
-        let d_sqrt_d_arg1 =  1.0/(2.0*self.value.sqrt());
-        let output_tangent = one_vec_mul(&self.tangent, d_sqrt_d_arg1);
+        let d_sqrt_d_arg1 =  (1.0/(2.0*self.value.sqrt())) as f32;
+        let output_tangent = f32x16::splat(d_sqrt_d_arg1)*self.tangent;
 
         Self {
             value: output_value,
@@ -1195,7 +1167,7 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn exp(self) -> Self {
         let output_value = self.value.exp();
-        let output_tangent = one_vec_mul(&self.tangent, output_value);
+        let output_tangent = f32x16::splat(output_value as f32)*self.tangent;
 
         Self {
             value: output_value,
@@ -1215,9 +1187,9 @@ impl<const N: usize> ComplexField for adf<N> {
     #[inline]
     fn powf(self, n: Self::RealField) -> Self {
         let output_value = self.value.powf(n.value);
-        let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0);
-        let d_powf_d_arg2 = self.value.powf(n.value) * self.value.ln();
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);
+        let d_powf_d_arg1 = (n.value * self.value.powf(n.value - 1.0)) as f32;
+        let d_powf_d_arg2 = (self.value.powf(n.value) * self.value.ln()) as f32;
+        let output_tangent = f32x16::splat(d_powf_d_arg1)*self.tangent + f32x16::splat(d_powf_d_arg2)*n.tangent;
 
         Self {
             value: output_value,
@@ -1238,132 +1210,133 @@ impl<const N: usize> ComplexField for adf<N> {
     }
 }
 
-impl<const N: usize> SubsetOf<Self> for adf<N> {
+impl SubsetOf<Self> for adf2 {
     fn to_superset(&self) -> Self {
         self.clone()
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.clone()
     }
 
-    fn is_in_subset(_element: &adf<N>) -> bool {
+    fn is_in_subset(_element: &adf2) -> bool {
         true
     }
 }
 
-impl<const N: usize> Field for adf<N> {}
+impl Field for adf2 {}
 
-impl<const N: usize> PrimitiveSimdValue for adf<N> {}
+impl PrimitiveSimdValue for adf2 {}
 
-impl<const N: usize> SubsetOf<adf<N>> for f32 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for f32 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value() as f32
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<adf<N>> for f64 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for f64 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value()
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<adf<N>> for u32 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for u32 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value() as u32
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<adf<N>> for u64 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for u64 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value() as u64
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<adf<N>> for u128 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for u128 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value() as u128
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<adf<N>> for i32 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for i32 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value() as i32
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<adf<N>> for i64 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for i64 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value() as i64
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<adf<N>> for i128 {
-    fn to_superset(&self) -> adf<N> {
-        adf::new_constant(*self as f64)
+impl SubsetOf<adf2> for i128 {
+    fn to_superset(&self) -> adf2 {
+        adf2::constant(*self as f64)
     }
 
-    fn from_superset_unchecked(element: &adf<N>) -> Self {
+    fn from_superset_unchecked(element: &adf2) -> Self {
         element.value() as i128
     }
 
-    fn is_in_subset(_: &adf<N>) -> bool {
+    fn is_in_subset(_: &adf2) -> bool {
         false
     }
 }
+

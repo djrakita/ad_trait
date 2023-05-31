@@ -7,6 +7,7 @@ pub mod simd;
 
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
+use faer_core::Entity;
 use nalgebra::{DMatrix, DVector};
 use num_traits::{Float, Signed};
 use simba::scalar::ComplexField;

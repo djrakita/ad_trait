@@ -8,15 +8,15 @@ edition = "2021"
 [dependencies]
 nalgebra = "*"
 num-traits = "*"
-simba= { version = "*" }
+simba= { version = "*", features = ["packed_simd"] }
 approx = "*"
 rand = "*"
 once_cell = "*"
-wide = "*"
 tinyvec = {version = "*", features = ['alloc'] }
 faer-core = "*"
 faer-svd  = "*"
 dyn-stack = "*"
+vek = {version = "*", features = ['vec8', 'vec16', 'vec32', 'vec64'] }
 
 [profile.dev]
 opt-level = 3
