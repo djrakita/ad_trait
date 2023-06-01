@@ -1,13 +1,13 @@
 
 use simba::scalar::ComplexField;
 use ad_trait::AD;
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::reverse_ad::adr::{adr};
 
 fn main() {
-    let a = adf::new(1.1, [0.0]);
-    let b = adf::new(2.0, [1.0]);
-    let _c = adf::new(3.0, [0.0]);
+    let a = adfn::new(1.1, [0.0]);
+    let b = adfn::new(2.0, [1.0]);
+    let _c = adfn::new(3.0, [0.0]);
 
     let res = (a).powf(b);
     println!("{:?}", res);

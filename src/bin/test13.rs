@@ -1,10 +1,10 @@
 use std::time::Instant;
 use nalgebra::UnitQuaternion;
 use simba::simd::{f32x16, f32x2, f32x4, f32x8, f64x8, SimdComplexField, SimdValue};
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::AD;
 use ad_trait::forward_ad::adf2::adf2;
-use ad_trait::forward_ad::adf3::{adf_f32x16, adf_f32x8, adf_f64x8};
+use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x4, adf_f32x8, adf_f64x8};
 use ad_trait::simd::f64xn::f64xn;
 
 fn main() {
@@ -32,9 +32,9 @@ fn main() {
     println!("{:?}", start.elapsed());
     println!("{:?}", q3);
 
-    let q1 = UnitQuaternion::from_euler_angles(adf::<N>::constant(1.0),adf::<N>::constant(2.0),adf::<N>::constant(3.0));
-    let q2 = UnitQuaternion::from_euler_angles(adf::<N>::constant(4.0),adf::<N>::constant(5.0),adf::<N>::constant(6.0));
-    let mut q3 = UnitQuaternion::from_euler_angles(adf::<N>::constant(7.0),adf::<N>::constant(8.0),adf::<N>::constant(9.0));
+    let q1 = UnitQuaternion::from_euler_angles(adfn::<N>::constant(1.0), adfn::<N>::constant(2.0), adfn::<N>::constant(3.0));
+    let q2 = UnitQuaternion::from_euler_angles(adfn::<N>::constant(4.0), adfn::<N>::constant(5.0), adfn::<N>::constant(6.0));
+    let mut q3 = UnitQuaternion::from_euler_angles(adfn::<N>::constant(7.0), adfn::<N>::constant(8.0), adfn::<N>::constant(9.0));
 
     let start = Instant::now();
     for _ in 0..1000 {
@@ -54,9 +54,9 @@ fn main() {
     println!("{:?}", start.elapsed());
     println!("{:?}", q3);
 
-    let q1 = UnitQuaternion::from_euler_angles(adf_f64x8::constant(1.0),adf_f64x8::constant(2.0),adf_f64x8::constant(3.0));
-    let q2 = UnitQuaternion::from_euler_angles(adf_f64x8::constant(4.0), adf_f64x8::constant(5.0),adf_f64x8::constant(6.0));
-    let mut q3 = UnitQuaternion::from_euler_angles(adf_f64x8::constant(7.0),adf_f64x8::constant(8.0),adf_f64x8::constant(9.0));
+    let q1 = UnitQuaternion::from_euler_angles(adf_f32x4::constant(1.0),adf_f32x4::constant(2.0),adf_f32x4::constant(3.0));
+    let q2 = UnitQuaternion::from_euler_angles(adf_f32x4::constant(4.0), adf_f32x4::constant(5.0),adf_f32x4::constant(6.0));
+    let mut q3 = UnitQuaternion::from_euler_angles(adf_f32x4::constant(7.0),adf_f32x4::constant(8.0),adf_f32x4::constant(9.0));
 
     let start = Instant::now();
     for _ in 0..1000 {

@@ -1,3 +1,4 @@
+
 extern crate core;
 
 pub mod differentiable_block;
@@ -37,7 +38,7 @@ pub trait AD :
 {
     fn constant(constant: f64) -> Self;
     fn to_constant(&self) -> f64;
-    // fn ad_num_type() -> ADNumType;
+    fn ad_num_mode() -> ADNumMode;
     fn add_scalar(arg1: f64, arg2: Self) -> Self;
     fn sub_l_scalar(arg1: f64, arg2: Self) -> Self;
     fn sub_r_scalar(arg1: Self, arg2: f64) -> Self;
@@ -59,91 +60,107 @@ macro_rules! ad_setup {
 }
 ad_setup!(f64, f32);
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ADNumMode {
+    Float,
+    ForwardAD,
+    ReverseAD,
+    SIMDNum
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl AD for f64 {
-        fn constant(v: f64) -> Self {
-            return v;
-        }
-
-        fn to_constant(&self) -> f64 {
-            *self
-        }
-
-        fn add_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 + arg2
-        }
-
-        fn sub_l_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 - arg2
-        }
-
-        fn sub_r_scalar(arg1: Self, arg2: f64) -> Self {
-            arg1 - arg2
-        }
-
-        fn mul_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 * arg2
-        }
-
-        fn div_l_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 / arg2
-        }
-
-        fn div_r_scalar(arg1: Self, arg2: f64) -> Self {
-            arg1 / arg2
-        }
-
-        fn rem_l_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 % arg2
-        }
-
-        fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
-            arg1 % arg2
-        }
+    fn constant(v: f64) -> Self {
+        return v;
     }
+
+    fn to_constant(&self) -> f64 {
+        *self
+    }
+
+    fn ad_num_mode() -> ADNumMode {
+        ADNumMode::Float
+    }
+
+    fn add_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 + arg2
+    }
+
+    fn sub_l_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 - arg2
+    }
+
+    fn sub_r_scalar(arg1: Self, arg2: f64) -> Self {
+        arg1 - arg2
+    }
+
+    fn mul_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 * arg2
+    }
+
+    fn div_l_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 / arg2
+    }
+
+    fn div_r_scalar(arg1: Self, arg2: f64) -> Self {
+        arg1 / arg2
+    }
+
+    fn rem_l_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 % arg2
+    }
+
+    fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
+        arg1 % arg2
+    }
+}
 
 impl AD for f32 {
-        fn constant(v: f64) -> Self {
-            return v as f32;
-        }
-
-        fn to_constant(&self) -> f64 {
-            *self as f64
-        }
-
-        fn add_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 as f32 + arg2
-        }
-
-        fn sub_l_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 as f32 - arg2
-        }
-
-        fn sub_r_scalar(arg1: Self, arg2: f64) -> Self {
-            arg1 - arg2 as f32
-        }
-
-        fn mul_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 as f32 * arg2
-        }
-
-        fn div_l_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 as f32 / arg2
-        }
-
-        fn div_r_scalar(arg1: Self, arg2: f64) -> Self {
-            arg1 / arg2 as f32
-        }
-
-        fn rem_l_scalar(arg1: f64, arg2: Self) -> Self {
-            arg1 as f32 % arg2
-        }
-
-        fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
-            arg1 % arg2 as f32
-        }
+    fn constant(v: f64) -> Self {
+        return v as f32;
     }
+
+    fn to_constant(&self) -> f64 {
+        *self as f64
+    }
+
+    fn ad_num_mode() -> ADNumMode {
+        ADNumMode::Float
+    }
+
+    fn add_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 as f32 + arg2
+    }
+
+    fn sub_l_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 as f32 - arg2
+    }
+
+    fn sub_r_scalar(arg1: Self, arg2: f64) -> Self {
+        arg1 - arg2 as f32
+    }
+
+    fn mul_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 as f32 * arg2
+    }
+
+    fn div_l_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 as f32 / arg2
+    }
+
+    fn div_r_scalar(arg1: Self, arg2: f64) -> Self {
+        arg1 / arg2 as f32
+    }
+
+    fn rem_l_scalar(arg1: f64, arg2: Self) -> Self {
+        arg1 as f32 % arg2
+    }
+
+    fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
+        arg1 % arg2 as f32
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

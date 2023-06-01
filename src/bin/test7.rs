@@ -1,6 +1,6 @@
 use nalgebra::DMatrix;
 use ad_trait::AD;
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::reverse_ad::adr::adr;
 use ad_trait::simd::f64xn::f64xn;
 
@@ -20,8 +20,8 @@ impl<T: AD> A<T> {
 }
 
 fn main() {
-    let a1 = A::<adf<3>>::new();
-    let a2 = A::<adf<3>>::new();
+    let a1 = A::<adfn<3>>::new();
+    let a2 = A::<adfn<3>>::new();
 
     println!("{}", a1.m * a2.m);
 

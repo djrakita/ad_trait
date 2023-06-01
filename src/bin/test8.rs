@@ -1,16 +1,16 @@
 use std::time::Instant;
 use simba::scalar::ComplexField;
 use ad_trait::AD;
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::reverse_ad::adr::adr;
 use ad_trait::simd::f64xn::f64xn;
 
 const N: usize = 16;
 
 fn main() {
-    let a1 = adf::<N>::constant(1.0);
-    let a2 = adf::<N>::constant(3.0);
-    let mut a3 = adf::<N>::new(2.0, [1.0; N]);
+    let a1 = adfn::<N>::constant(1.0);
+    let a2 = adfn::<N>::constant(3.0);
+    let mut a3 = adfn::<N>::new(2.0, [1.0; N]);
 
     let start = Instant::now();
     for _ in 0..1000 {

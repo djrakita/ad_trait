@@ -1,15 +1,15 @@
 use std::time::Instant;
 use num_traits::Zero;
 use simba::scalar::ComplexField;
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::forward_ad::adfg::adfg;
 
 const D: usize = 16;
 
 fn main() {
-    let a = adf::new(1.1, [1.0; D]);
-    let b = adf::new(2.0, [1.0; D]);
-    let mut c = adf::new(2.0, [1.0; D]);
+    let a = adfn::new(1.1, [1.0; D]);
+    let b = adfn::new(2.0, [1.0; D]);
+    let mut c = adfn::new(2.0, [1.0; D]);
 
     let start = Instant::now();
     for _ in 0..1000 {
@@ -31,9 +31,9 @@ fn main() {
     println!("{:?}", c.value());
     println!("{:?}", c.tangent());
 
-    let a = adf::new(1.1, [1.0; D]);
-    let b = adf::new(2.0, [1.0; D]);
-    let mut c = adf::new(2.0, [1.0; D]);
+    let a = adfn::new(1.1, [1.0; D]);
+    let b = adfn::new(2.0, [1.0; D]);
+    let mut c = adfn::new(2.0, [1.0; D]);
 
     let aa = adfg::new(a, [a; D]);
     let bb = adfg::new(b, [b; D]);
@@ -58,5 +58,5 @@ fn main() {
     println!("{:?}", start.elapsed());
     println!("{:?}", c);
 
-    let a = adf::new(1.1, [1.0; D]);
+    let a = adfn::new(1.1, [1.0; D]);
 }

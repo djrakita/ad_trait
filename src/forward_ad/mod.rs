@@ -1,9 +1,22 @@
-pub mod adf;
+pub mod adfn;
 pub mod adfg;
 pub mod adf2;
-pub mod adf3;
+pub mod adf;
 
-
+pub trait ForwardADTrait {
+    fn value(&self) -> f64;
+    fn tangent_size() -> usize;
+    fn tangent_as_vec(&self) -> Vec<f64>;
+    fn set_value(&mut self, value: f64);
+    fn set_tangent(&mut self, tangent: Vec<f64>) {
+        let t = Self::tangent_size();
+        assert_eq!(tangent.len(), t);
+        for i in 0..t {
+            self.set_tangent_value(i, tangent[i]);
+        }
+    }
+    fn set_tangent_value(&mut self, idx: usize, value: f64);
+}
 
 /*
 use std::ops::{Add, AddAssign, Sub};

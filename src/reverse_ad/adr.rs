@@ -12,7 +12,7 @@ use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPri
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
 use tinyvec::{TinyVec, tiny_vec};
-use crate::{AD, F64};
+use crate::{AD, ADNumMode, F64};
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy)]
@@ -105,6 +105,10 @@ impl AD for adr {
 
     fn to_constant(&self) -> f64 {
         self.value()
+    }
+
+    fn ad_num_mode() -> ADNumMode {
+        ADNumMode::ReverseAD
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {

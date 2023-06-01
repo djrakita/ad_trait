@@ -1,3 +1,6 @@
+// This is a placeholder.  It was used to make all of the macro implementations in adf.rs.
+
+/*
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::num::FpCategory;
@@ -9,7 +12,7 @@ use nalgebra::{Dim, Matrix, RawStorageMut};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{f32x16, PrimitiveSimdValue, SimdValue};
-use crate::{AD, F64};
+use crate::{AD, ADNumMode, F64};
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy)]
@@ -50,6 +53,10 @@ impl AD for adf2 {
 
     fn to_constant(&self) -> f64 {
         self.value
+    }
+
+    fn ad_num_mode() -> ADNumMode {
+        ADNumMode::ForwardAD
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {
@@ -1339,4 +1346,5 @@ impl SubsetOf<adf2> for i128 {
         false
     }
 }
+*/
 

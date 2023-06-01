@@ -1,6 +1,6 @@
 use std::time::Instant;
 use ad_trait::AD;
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::simd::f64xn::f64xn;
 use vek::{Vec32, Vec16, Vec8, Vec4};
 
@@ -34,9 +34,9 @@ fn main() {
     println!("{:?}", start.elapsed());
     println!("{:?}", v3);
 
-    let v1 = adf::<N>::constant(1.0);
-    let v2 = adf::<N>::constant(1.01);
-    let mut v3 = adf::<N>::constant(0.0);
+    let v1 = adfn::<N>::constant(1.0);
+    let v2 = adfn::<N>::constant(1.01);
+    let mut v3 = adfn::<N>::constant(0.0);
 
     let start = Instant::now();
     for _ in 0..(m*n*q) {

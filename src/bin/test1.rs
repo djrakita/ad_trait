@@ -1,6 +1,6 @@
 use std::time::Instant;
 use vek::{Vec16, Vec4};
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::forward_ad::adf_g::adf_g;
 use ad_trait::forward_ad::adfm::{adfm, adfm2};
 
@@ -14,8 +14,8 @@ fn main() {
     }
     println!("{:?}, {:?}", start.elapsed(), a);
 
-    let mut a = adf::new(1.0, 1.0);
-    let b = adf::new(1.0001, 1.0);
+    let mut a = adfn::new(1.0, 1.0);
+    let b = adfn::new(1.0001, 1.0);
 
     let start = Instant::now();
     for _ in 0..1000 {

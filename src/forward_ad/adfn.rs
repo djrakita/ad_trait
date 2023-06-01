@@ -1,59 +1,66 @@
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 use std::num::FpCategory;
-use std::ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
+use faer_core::Entity;
+use faer_core::pulp::Simd;
 use nalgebra::{Dim, Matrix, RawStorageMut};
 use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
 use crate::{AD, ADNumMode, F64};
+use crate::forward_ad::ForwardADTrait;
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy)]
-pub struct f64xn<const N: usize> {
-    pub (crate) value: [f64; N]
+pub struct adfn<const N: usize> {
+    pub (crate) value: f64,
+    pub (crate) tangent: [f64; N]
 }
-impl<const N: usize> f64xn<N> {
-    pub fn new(value: [f64; N]) -> Self {
+impl<const N: usize> adfn<N> {
+    pub fn new(value: f64, tangent: [f64; N]) -> Self {
         Self {
-            value
+            value,
+            tangent
         }
     }
-    pub fn splat(value: f64) -> Self {
+    pub fn new_constant(value: f64) -> Self {
         Self {
-            value: [value; N]
+            value,
+            tangent: [0.0; N]
         }
     }
     #[inline]
-    pub fn value(&self) -> [f64; N] {
+    pub fn value(&self) -> f64 {
         self.value
     }
-}
-impl<const N: usize> Index<usize> for f64xn<N> {
-    type Output = f64;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        return &self.value[index];
+    #[inline]
+    pub fn tangent(&self) -> [f64; N] {
+        self.tangent
     }
-}
-impl<const N: usize> IndexMut<usize> for f64xn<N> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.value[index]
+    #[inline]
+    pub fn tangent_size() -> usize { N }
+    #[inline]
+    pub fn tangent_as_vec(&self) -> Vec<f64> {
+        self.tangent.to_vec()
     }
 }
 
-impl<const N: usize> AD for f64xn<N> {
+impl<const N: usize> AD for adfn<N> {
     fn constant(constant: f64) -> Self {
-        Self::splat(constant)
+        Self {
+            value: constant,
+            tangent: [0.0; N]
+        }
     }
 
     fn to_constant(&self) -> f64 {
-        panic!("f64xn not compatible with to_constant")
+        self.value
     }
 
     fn ad_num_mode() -> ADNumMode {
-        ADNumMode::SIMDNum
+        ADNumMode::ForwardAD
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {
@@ -89,9 +96,58 @@ impl<const N: usize> AD for f64xn<N> {
     }
 }
 
+impl<const N: usize> ForwardADTrait for adfn<N> {
+    fn value(&self) -> f64 {
+        self.value
+    }
+
+    fn tangent_size() -> usize {
+        N
+    }
+
+    fn tangent_as_vec(&self) -> Vec<f64> {
+        self.tangent_as_vec()
+    }
+
+    fn set_value(&mut self, value: f64) {
+        self.value = value;
+    }
+
+    fn set_tangent_value(&mut self, idx: usize, value: f64) {
+        self.tangent[idx] = value;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> Add<F64> for f64xn<N> {
+#[inline(always)]
+fn two_vecs_mul_and_add<const N: usize>(vec1: &[f64; N], vec2: &[f64; N], scalar1: f64, scalar2: f64) -> [f64; N] {
+    let mut out = [0.0; N];
+    for i in 0..N {
+        out[i] = scalar1*vec1[i] + scalar2*vec2[i];
+    }
+    out
+}
+#[inline(always)]
+fn two_vecs_add<const N: usize>(vec1: &[f64; N], vec2: &[f64; N]) -> [f64; N] {
+    let mut out = [0.0; N];
+    for i in 0..N {
+        out[i] = vec1[i] + vec2[i];
+    }
+    out
+}
+#[inline(always)]
+fn one_vec_mul<const N: usize>(vec: &[f64; N], scalar: f64) -> [f64; N] {
+    let mut out = [0.0; N];
+    for i in 0..N {
+        out[i] = scalar*vec[i];
+    }
+    out
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+impl<const N: usize> Add<F64> for adfn<N> {
     type Output = Self;
 
     #[inline]
@@ -100,14 +156,14 @@ impl<const N: usize> Add<F64> for f64xn<N> {
     }
 }
 
-impl<const N: usize> AddAssign<F64> for f64xn<N> {
+impl<const N: usize> AddAssign<F64> for adfn<N> {
     #[inline]
     fn add_assign(&mut self, rhs: F64) {
         *self = *self + rhs;
     }
 }
 
-impl<const N: usize> Mul<F64> for f64xn<N> {
+impl<const N: usize> Mul<F64> for adfn<N> {
     type Output = Self;
 
     #[inline]
@@ -116,14 +172,14 @@ impl<const N: usize> Mul<F64> for f64xn<N> {
     }
 }
 
-impl<const N: usize> MulAssign<F64> for f64xn<N> {
+impl<const N: usize> MulAssign<F64> for adfn<N> {
     #[inline]
     fn mul_assign(&mut self, rhs: F64) {
         *self = *self * rhs;
     }
 }
 
-impl<const N: usize> Sub<F64> for f64xn<N> {
+impl<const N: usize> Sub<F64> for adfn<N> {
     type Output = Self;
 
     #[inline]
@@ -132,14 +188,14 @@ impl<const N: usize> Sub<F64> for f64xn<N> {
     }
 }
 
-impl<const N: usize> SubAssign<F64> for f64xn<N> {
+impl<const N: usize> SubAssign<F64> for adfn<N> {
     #[inline]
     fn sub_assign(&mut self, rhs: F64) {
         *self = *self - rhs;
     }
 }
 
-impl<const N: usize> Div<F64> for f64xn<N> {
+impl<const N: usize> Div<F64> for adfn<N> {
     type Output = Self;
 
     #[inline]
@@ -148,14 +204,14 @@ impl<const N: usize> Div<F64> for f64xn<N> {
     }
 }
 
-impl<const N: usize> DivAssign<F64> for f64xn<N> {
+impl<const N: usize> DivAssign<F64> for adfn<N> {
     #[inline]
     fn div_assign(&mut self, rhs: F64) {
         *self = *self / rhs;
     }
 }
 
-impl<const N: usize> Rem<F64> for f64xn<N> {
+impl<const N: usize> Rem<F64> for adfn<N> {
     type Output = Self;
 
     #[inline]
@@ -164,7 +220,7 @@ impl<const N: usize> Rem<F64> for f64xn<N> {
     }
 }
 
-impl<const N: usize> RemAssign<F64> for  f64xn<N> {
+impl<const N: usize> RemAssign<F64> for  adfn<N> {
     #[inline]
     fn rem_assign(&mut self, rhs: F64) {
         *self = *self % rhs;
@@ -173,118 +229,120 @@ impl<const N: usize> RemAssign<F64> for  f64xn<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> Add<Self> for f64xn<N> {
+impl<const N: usize> Add<Self> for adfn<N> {
     type Output = Self;
 
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
-        let mut value = [0.0; N];
-
-        for i in 0..N { value[i] = self[i] + rhs[i]; }
+        let output_value = self.value + rhs.value;
+        let output_tangent = two_vecs_add(&self.tangent, &rhs.tangent);
 
         Self {
-            value
+            value: output_value,
+            tangent: output_tangent
         }
+
     }
 }
-impl<const N: usize> AddAssign<Self> for f64xn<N> {
+impl<const N: usize> AddAssign<Self> for adfn<N> {
     #[inline]
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;
     }
 }
 
-impl<const N: usize> Mul<Self> for f64xn<N> {
+impl<const N: usize> Mul<Self> for adfn<N> {
     type Output = Self;
 
         #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
-        let mut value = [0.0; N];
-
-        for i in 0..N { value[i] = self[i] * rhs[i]; }
+        let output_value = self.value * rhs.value;
+        let output_tangent = two_vecs_mul_and_add(&self.tangent, &rhs.tangent, rhs.value, self.value);
 
         Self {
-            value
+            value: output_value,
+            tangent: output_tangent
         }
+
     }
 }
-impl<const N: usize> MulAssign<Self> for f64xn<N> {
+impl<const N: usize> MulAssign<Self> for adfn<N> {
     #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs;
     }
 }
 
-impl<const N: usize> Sub<Self> for f64xn<N> {
+impl<const N: usize> Sub<Self> for adfn<N> {
     type Output = Self;
 
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
-        let mut value = [0.0; N];
-
-        for i in 0..N { value[i] = self[i] - rhs[i]; }
+        let output_value = self.value - rhs.value;
+        let output_tangent = two_vecs_mul_and_add(&self.tangent, &rhs.tangent, 1.0, -1.0);
 
         Self {
-            value
+            value: output_value,
+            tangent: output_tangent
         }
+
     }
 }
-impl<const N: usize> SubAssign<Self> for f64xn<N> {
+impl<const N: usize> SubAssign<Self> for adfn<N> {
     #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         *self = *self - rhs;
     }
 }
 
-impl<const N: usize> Div<Self> for f64xn<N> {
+impl<const N: usize> Div<Self> for adfn<N> {
     type Output = Self;
 
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
-        let mut value = [0.0; N];
-
-        for i in 0..N { value[i] = self[i] / rhs[i]; }
+        let output_value = self.value / rhs.value;
+        let d_div_d_arg1 = 1.0/rhs.value;
+        let d_div_d_arg2 = -self.value/(rhs.value*rhs.value);
+        let output_tangent = two_vecs_mul_and_add(&self.tangent, &rhs.tangent, d_div_d_arg1, d_div_d_arg2);
 
         Self {
-            value
+            value: output_value,
+            tangent: output_tangent
         }
+
     }
 }
-impl<const N: usize> DivAssign<Self> for f64xn<N> {
+impl<const N: usize> DivAssign<Self> for adfn<N> {
     #[inline]
     fn div_assign(&mut self, rhs: Self) {
         *self = *self / rhs;
     }
 }
 
-impl<const N: usize> Rem<Self> for f64xn<N> {
+impl<const N: usize> Rem<Self> for adfn<N> {
     type Output = Self;
 
     #[inline]
-    fn rem(self, _rhs: Self) -> Self::Output {
-        todo!()
-        // self - ComplexField::floor((self/rhs))*rhs
+    fn rem(self, rhs: Self) -> Self::Output {
+        self - ComplexField::floor(self/rhs)*rhs
         // self - (self / rhs).floor() * rhs
     }
 }
-impl<const N: usize> RemAssign<Self> for f64xn<N> {
+impl<const N: usize> RemAssign<Self> for adfn<N> {
     #[inline]
     fn rem_assign(&mut self, rhs: Self) {
         *self = *self % rhs;
     }
 }
 
-impl<const N: usize> Neg for f64xn<N> {
+impl<const N: usize> Neg for adfn<N> {
     type Output = Self;
 
     #[inline]
     fn neg(self) -> Self::Output {
-        let mut value = [0.0; N];
-
-        for i in 0..N { value[i] = -self[i]; }
-
         Self {
-            value
+            value: -self.value,
+            tangent: one_vec_mul(&self.tangent, -1.0)
         }
     }
 }
@@ -292,7 +350,7 @@ impl<const N: usize> Neg for f64xn<N> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*
-impl<const N: usize> Float for f64xn<N> {
+impl<const N: usize> Float for adf<N> {
     fn nan() -> Self {
         Self::constant(f64::NAN)
     }
@@ -317,64 +375,22 @@ impl<const N: usize> Float for f64xn<N> {
         Self::constant(f64::MAX)
     }
 
-    fn is_nan(self) -> bool {
-        let initial = self.value[0].is_nan();
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i].is_nan()) != initial {
-                    panic!("is_nan is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
-    }
+    fn is_nan(self) -> bool { self.value.is_nan() }
 
     fn is_infinite(self) -> bool {
-        let initial = self.value[0].is_infinite();
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i].is_infinite()) != initial {
-                    panic!("is_infinite is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
+        self.value.is_infinite()
     }
 
     fn is_finite(self) -> bool {
-        let initial = self.value[0].is_finite();
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i].is_finite()) != initial {
-                    panic!("is_finite is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
+        self.value.is_finite()
     }
 
     fn is_normal(self) -> bool {
-        let initial = self.value[0].is_normal();
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i].is_normal()) != initial {
-                    panic!("is_normal is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
+        self.value.is_normal()
     }
 
     fn classify(self) -> FpCategory {
-        let initial = self.value[0].classify();
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i].classify()) != initial {
-                    panic!("classify is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
+        self.value.classify()
     }
 
     fn floor(self) -> Self { ComplexField::floor(self) }
@@ -529,86 +545,71 @@ impl<const N: usize> Float for f64xn<N> {
         ComplexField::atanh(self)
     }
 
-    fn integer_decode(self) -> (u64, i16, i8) { panic!("integer_decode not compatible with f64xn") }
+    fn integer_decode(self) -> (u64, i16, i8) { return self.value.integer_decode() }
 }
 
-impl<const N: usize> NumCast for f64xn<N> {
+impl<const N: usize> NumCast for adf<N> {
     fn from<T: ToPrimitive>(_n: T) -> Option<Self> { unimplemented!() }
 }
 
-impl<const N: usize> ToPrimitive for f64xn<N> {
+impl<const N: usize> ToPrimitive for adf<N> {
     fn to_i64(&self) -> Option<i64> {
-        None
+        self.value.to_i64()
     }
 
     fn to_u64(&self) -> Option<u64> {
-        None
+        self.value.to_u64()
     }
 }
 */
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize>  PartialEq for f64xn<N> {
+impl<const N: usize>  PartialEq for adfn<N> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        let initial = self.value[0] == other.value[0];
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i] == other.value[i]) != initial {
-                    panic!("eq is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
+        self.value == other.value
     }
 }
 
-impl<const N: usize>  PartialOrd for f64xn<N> {
+impl<const N: usize>  PartialOrd for adfn<N> {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let initial = self.value[0].partial_cmp(&other.value[0]);
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i].partial_cmp(&other.value[i])) != initial {
-                    panic!("partial_cmp is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
+        self.value.partial_cmp(&other.value)
     }
 }
 
-impl<const N: usize>  Display for f64xn<N> {
+impl<const N: usize>  Display for adfn<N> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         f.write_str(&format!("{:?}", self)).expect("error");
         Ok(())
     }
 }
 
-impl<const N: usize>  From<f64> for f64xn<N> {
+impl<const N: usize>  From<f64> for adfn<N> {
     fn from(value: f64) -> Self {
-        Self::splat(value)
+        Self::new(value, [0.0; N])
     }
 }
-impl<const N: usize>  Into<f64> for f64xn<N> {
+impl<const N: usize>  Into<f64> for adfn<N> {
     fn into(self) -> f64 {
-        self.value[0]
+        self.value
     }
 }
-impl<const N: usize>  From<f32> for f64xn<N> {
+impl<const N: usize>  From<f32> for adfn<N> {
     fn from(value: f32) -> Self {
-        Self::splat(value as f64)
+        Self::new(value as f64, [0.0; N])
     }
 }
-impl<const N: usize>  Into<f32> for f64xn<N> {
+impl<const N: usize>  Into<f32> for adfn<N> {
     fn into(self) -> f32 {
-        self.value[0] as f32
+        self.value as f32
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize>  UlpsEq for f64xn<N> {
+impl<const N: usize>  UlpsEq for adfn<N> {
     fn default_max_ulps() -> u32 {
         unimplemented!("take the time to figure this out.")
     }
@@ -618,11 +619,11 @@ impl<const N: usize>  UlpsEq for f64xn<N> {
     }
 }
 
-impl<const N: usize> AbsDiffEq for f64xn<N> {
+impl<const N: usize>  AbsDiffEq for adfn<N> {
     type Epsilon = Self;
 
     fn default_epsilon() -> Self::Epsilon {
-        Self::splat(0.000000001)
+        Self::constant(0.000000001)
     }
 
     fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
@@ -635,7 +636,7 @@ impl<const N: usize> AbsDiffEq for f64xn<N> {
     }
 }
 
-impl<const N: usize> RelativeEq for f64xn<N> {
+impl<const N: usize>  RelativeEq for adfn<N> {
     fn default_max_relative() -> Self::Epsilon {
         Self::constant(0.000000001)
     }
@@ -652,7 +653,7 @@ impl<const N: usize> RelativeEq for f64xn<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> SimdValue for f64xn<N> {
+impl<const N: usize> SimdValue for adfn<N> {
     type Element = Self;
     type SimdBool = bool;
 
@@ -687,7 +688,7 @@ impl<const N: usize> SimdValue for f64xn<N> {
     }
 }
 
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64xn<N>, R, C>> Mul<Matrix<f64xn<N>, R, C, S>> for f64xn<N> {
+impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adfn<N>, R, C>> Mul<Matrix<adfn<N>, R, C, S>> for adfn<N> {
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: Matrix<Self, R, C, S>) -> Self::Output {
@@ -700,7 +701,7 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f6
 }
 
 /*
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<Matrix<f64, R, C, S>> for f64xn<N> {
+impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<Matrix<f64, R, C, S>> for adf<N> {
     type Output = Matrix<f64, R, C, S>;
 
     fn mul(self, rhs: Matrix<f64, R, C, S>) -> Self::Output {
@@ -713,7 +714,7 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f6
 }
 */
 
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64xn<N>, R, C>> Mul<&Matrix<f64xn<N>, R, C, S>> for f64xn<N> {
+impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adfn<N>, R, C>> Mul<&Matrix<adfn<N>, R, C, S>> for adfn<N> {
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: &Matrix<Self, R, C, S>) -> Self::Output {
@@ -726,7 +727,7 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f6
 }
 
 /*
-impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&Matrix<f64, R, C, S>> for f64xn {
+impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&Matrix<f64, R, C, S>> for adf {
     type Output = Matrix<f64, R, C, S>;
 
     fn mul(self, rhs: &Matrix<f64, R, C, S>) -> Self::Output {
@@ -741,25 +742,25 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> Zero for f64xn<N> {
+impl<const N: usize> Zero for adfn<N> {
     #[inline(always)]
     fn zero() -> Self {
         return Self::constant(0.0)
     }
 
     fn is_zero(&self) -> bool {
-        return *self == Self::constant(0.0);
+        return self.value == 0.0;
     }
 }
 
-impl<const N: usize> One for f64xn<N> {
+impl<const N: usize> One for adfn<N> {
     #[inline(always)]
     fn one() -> Self {
         Self::constant(1.0)
     }
 }
 
-impl<const N: usize> Num for f64xn<N> {
+impl<const N: usize> Num for adfn<N> {
     type FromStrRadixErr = ();
 
     fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
@@ -768,16 +769,20 @@ impl<const N: usize> Num for f64xn<N> {
     }
 }
 
-impl<const N: usize> Signed for f64xn<N> {
+impl<const N: usize> Signed for adfn<N> {
 
     #[inline]
     fn abs(&self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].abs();
-        }
+        let output_value = self.value.abs();
+        let output_tangent = if self.value >= 0.0 {
+            self.tangent
+        } else {
+            one_vec_mul(&self.tangent, -1.0)
+        };
+        
         Self {
-            value
+            value: output_value,
+            tangent: output_tangent
         }
     }
 
@@ -792,25 +797,24 @@ impl<const N: usize> Signed for f64xn<N> {
 
     #[inline]
     fn signum(&self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].signum();
-        }
+        let output_value = self.value.signum();
+        let output_tangent = [0.0; N];
         Self {
-            value
+            value: output_value,
+            tangent: output_tangent
         }
     }
 
     fn is_positive(&self) -> bool {
-        return *self > Self::zero();
+        return self.value > 0.0;
     }
 
     fn is_negative(&self) -> bool {
-        return *self < Self::zero();
+        return self.value < 0.0;
     }
 }
 
-impl<const N: usize> FromPrimitive for f64xn<N> {
+impl<const N: usize> FromPrimitive for adfn<N> {
     fn from_i64(n: i64) -> Option<Self> {
         Some(Self::constant(n as f64))
     }
@@ -820,7 +824,7 @@ impl<const N: usize> FromPrimitive for f64xn<N> {
     }
 }
 
-impl<const N: usize> Bounded for f64xn<N> {
+impl<const N: usize> Bounded for adfn<N> {
     fn min_value() -> Self {
         Self::constant(f64::MIN)
     }
@@ -832,7 +836,7 @@ impl<const N: usize> Bounded for f64xn<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize> RealField for f64xn<N> {
+impl<const N: usize> RealField for adfn<N> {
     fn is_sign_positive(&self) -> bool {
         return self.is_positive();
     }
@@ -851,20 +855,30 @@ impl<const N: usize> RealField for f64xn<N> {
 
     #[inline]
     fn max(self, other: Self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].max(other.value[i]);
+        let output_value = self.value.max(other.value);
+        let output_tangent = if self >= other {
+            self.tangent
+        } else {
+            other.tangent
+        };
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn min(self, other: Self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].min(other.value[i]);
+        let output_value = self.value.min(other.value);
+        let output_tangent = if self <= other {
+            self.tangent
+        } else {
+            other.tangent
+        };
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
@@ -875,11 +889,15 @@ impl<const N: usize> RealField for f64xn<N> {
 
     #[inline]
     fn atan2(self, other: Self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].atan2(other.value[i]);
+        let output_value = self.value.atan2(other.value);
+        let d_atan2_d_arg1 = other.value/(self.value*self.value + other.value*other.value);
+        let d_atan2_d_arg2 = -self.value/(self.value*self.value + other.value*other.value);
+        let output_tangent = two_vecs_mul_and_add(&self.tangent, &other.tangent, d_atan2_d_arg1, d_atan2_d_arg2);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     fn min_value() -> Option<Self> {
@@ -951,7 +969,7 @@ impl<const N: usize> RealField for f64xn<N> {
     }
 }
 
-impl<const N: usize> ComplexField for f64xn<N> {
+impl<const N: usize> ComplexField for adfn<N> {
     type RealField = Self;
 
     fn from_real(re: Self::RealField) -> Self { re.clone() }
@@ -977,48 +995,26 @@ impl<const N: usize> ComplexField for f64xn<N> {
 
     #[inline]
     fn floor(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].floor();
-        }
-        Self { value }
+        Self::new(self.value.floor(), [0.0; N])
     }
 
     #[inline]
     fn ceil(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].ceil();
-        }
-        Self { value }
+        Self::new(self.value.ceil(), [0.0; N])
     }
 
     #[inline]
     fn round(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].round();
-        }
-        Self { value }
+        Self::new(self.value.round(), [0.0; N])
     }
 
     #[inline]
     fn trunc(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].trunc();
-        }
-        Self { value }
+        Self::new(self.value.trunc(), [0.0; N])
     }
 
     #[inline]
-    fn fract(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].fract();
-        }
-        Self { value }
-    }
+    fn fract(self) -> Self { Self::new(self.value.fract(), [0.0; N]) }
 
     #[inline]
     fn mul_add(self, a: Self, b: Self) -> Self { return (self * a) + b; }
@@ -1041,20 +1037,26 @@ impl<const N: usize> ComplexField for f64xn<N> {
 
     #[inline]
     fn sin(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].sin();
+        let output_value = self.value.sin();
+        let d_sin_d_arg1 = self.value.cos();
+        let output_tangent = one_vec_mul(&self.tangent, d_sin_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn cos(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].cos();
+        let output_value = self.value.cos();
+        let d_cos_d_arg1 =  -self.value.sin();
+        let output_tangent = one_vec_mul(&self.tangent, d_cos_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
@@ -1064,101 +1066,139 @@ impl<const N: usize> ComplexField for f64xn<N> {
 
     #[inline]
     fn tan(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].tan();
+        let output_value = self.value.tan();
+        let c = self.value.cos();
+        let d_tan_d_arg1 =  1.0/(c*c);
+        let output_tangent = one_vec_mul(&self.tangent, d_tan_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn asin(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].asin();
+        let output_value = self.value.asin();
+        let d_asin_d_arg1 =  1.0 / (1.0 - self.value * self.value).sqrt();
+        let output_tangent = one_vec_mul(&self.tangent, d_asin_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn acos(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].acos();
+        let output_value = self.value.acos();
+        let d_acos_d_arg1 =  -1.0 / (1.0 - self.value * self.value).sqrt();
+        let output_tangent = one_vec_mul(&self.tangent, d_acos_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn atan(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].atan();
+        let output_value = self.value.acos();
+        let d_atan_d_arg1 =  1.0 / (self.value * self.value + 1.0);
+        let output_tangent = one_vec_mul(&self.tangent, d_atan_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn sinh(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].sinh();
+        let output_value = self.value.sinh();
+        let d_sinh_d_arg1 =  self.value.cosh();
+        let output_tangent = one_vec_mul(&self.tangent, d_sinh_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn cosh(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].cosh();
+        let output_value = self.value.cosh();
+        let d_cosh_d_arg1 =  self.value.sinh();
+        let output_tangent = one_vec_mul(&self.tangent, d_cosh_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn tanh(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].tanh();
+        let output_value = self.value.tanh();
+        let c = self.value.cosh();
+        let d_tanh_d_arg1 =  1.0/(c*c);
+        let output_tangent = one_vec_mul(&self.tangent, d_tanh_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn asinh(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].asinh();
+        let output_value = self.value.asinh();
+        let d_asinh_d_arg1 =  1.0/(self.value*self.value + 1.0).sqrt();
+        let output_tangent = one_vec_mul(&self.tangent, d_asinh_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn acosh(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].acosh();
+        let output_value = self.value.acosh();
+        let d_acosh_d_arg1 =  1.0/((self.value - 1.0).sqrt()*(self.value + 1.0).sqrt());
+        let output_tangent = one_vec_mul(&self.tangent, d_acosh_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn atanh(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].atanh();
+        let output_value = self.value.atanh();
+        let d_atanh_d_arg1 =  1.0/(1.0 - self.value*self.value);
+        let output_tangent = one_vec_mul(&self.tangent, d_atanh_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn log(self, base: Self::RealField) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].log(base.value[i]);
+        let output_value = self.value.log(base.value);
+        let ln_rhs = base.value.ln();
+        let ln_lhs = self.value.ln();
+        let d_log_d_arg1 = 1.0/(self.value * ln_rhs);
+        let d_log_d_arg2 = -ln_lhs / (base.value * ln_rhs * ln_rhs);
+        let output_tangent = two_vecs_mul_and_add(&self.tangent, &base.tangent, d_log_d_arg1, d_log_d_arg2);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
@@ -1175,20 +1215,25 @@ impl<const N: usize> ComplexField for f64xn<N> {
 
     #[inline]
     fn sqrt(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].sqrt();
+        let output_value = self.value.sqrt();
+        let d_sqrt_d_arg1 =  1.0/(2.0*self.value.sqrt());
+        let output_tangent = one_vec_mul(&self.tangent, d_sqrt_d_arg1);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
     fn exp(self) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].exp();
+        let output_value = self.value.exp();
+        let output_tangent = one_vec_mul(&self.tangent, output_value);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
@@ -1202,11 +1247,15 @@ impl<const N: usize> ComplexField for f64xn<N> {
 
     #[inline]
     fn powf(self, n: Self::RealField) -> Self {
-        let mut value = [0.0; N];
-        for i in 0..N {
-            value[i] = self.value[i].powf(n.value[i]);
+        let output_value = self.value.powf(n.value);
+        let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0);
+        let d_powf_d_arg2 = self.value.powf(n.value) * self.value.ln();
+        let output_tangent = two_vecs_mul_and_add(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);
+
+        Self {
+            value: output_value,
+            tangent: output_tangent
         }
-        Self { value }
     }
 
     #[inline]
@@ -1215,149 +1264,139 @@ impl<const N: usize> ComplexField for f64xn<N> {
     #[inline]
     fn cbrt(self) -> Self { return ComplexField::powf(self, Self::constant(1.0 / 3.0)); }
 
-    fn is_finite(&self) -> bool {
-        let initial = self.value[0].is_finite();
-        if N > 1 {
-            for i in 1..N {
-                if (self.value[i].is_finite()) != initial {
-                    panic!("is_finite is not consistent for f64xn.")
-                }
-            }
-        }
-        initial
-    }
+    fn is_finite(&self) -> bool { return self.value.is_finite(); }
 
     fn try_sqrt(self) -> Option<Self> {
         Some(ComplexField::sqrt(self))
     }
 }
 
-impl<const N: usize> SubsetOf<Self> for f64xn<N> {
+impl<const N: usize> SubsetOf<Self> for adfn<N> {
     fn to_superset(&self) -> Self {
         self.clone()
     }
 
-    fn from_superset_unchecked(element: &f64xn<N>) -> Self {
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
         element.clone()
     }
 
-    fn is_in_subset(_element: &f64xn<N>) -> bool {
+    fn is_in_subset(_element: &adfn<N>) -> bool {
         true
     }
 }
 
-impl<const N: usize> Field for f64xn<N> {}
+impl<const N: usize> Field for adfn<N> {}
 
-impl<const N: usize> PrimitiveSimdValue for f64xn<N> {}
+impl<const N: usize> PrimitiveSimdValue for adfn<N> {}
 
-impl<const N: usize> SubsetOf<f64xn<N>> for f32 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for f32 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value() as f32
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<f64xn<N>> for f64 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for f64 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value()
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<f64xn<N>> for u32 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for u32 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value() as u32
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<f64xn<N>> for u64 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for u64 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value() as u64
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<f64xn<N>> for u128 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for u128 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value() as u128
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<f64xn<N>> for i32 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for i32 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value() as i32
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<f64xn<N>> for i64 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for i64 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value() as i64
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }
 
-impl<const N: usize> SubsetOf<f64xn<N>> for i128 {
-    fn to_superset(&self) -> f64xn<N> {
-        f64xn::constant(*self as f64)
+impl<const N: usize> SubsetOf<adfn<N>> for i128 {
+    fn to_superset(&self) -> adfn<N> {
+        adfn::new_constant(*self as f64)
     }
 
-    fn from_superset_unchecked(_element: &f64xn<N>) -> Self {
-        panic!("incompatible with f64xn")
+    fn from_superset_unchecked(element: &adfn<N>) -> Self {
+        element.value() as i128
     }
 
-    fn is_in_subset(_: &f64xn<N>) -> bool {
+    fn is_in_subset(_: &adfn<N>) -> bool {
         false
     }
 }

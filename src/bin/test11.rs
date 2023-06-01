@@ -1,17 +1,17 @@
 use std::time::Instant;
 use nalgebra::DMatrix;
 use ad_trait::AD;
-use ad_trait::forward_ad::adf::adf;
+use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::reverse_ad::adr::adr;
 use ad_trait::simd::f64xn::f64xn;
 use vek::Vec32;
 use simba::simd::{f64x4, SimdValue, f64x8, f64x2, f32x8, f32x4, f32x16};
 use ad_trait::forward_ad::adf2::adf2;
-use ad_trait::forward_ad::adf3::{adf_f32x16, adf_f32x2, adf_f32x8, adf_f64x2, adf_f64x4};
+use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x2, adf_f32x8, adf_f64x2, adf_f64x4};
 
 fn main() {
-    let m = 20;
-    let n = 20;
+    let m = 10;
+    let n = 10;
 
     let d1 = DMatrix::<f64>::from_vec(m, n, vec![1.0; m*n]);
     let d2 = DMatrix::<f64>::from_vec(m, n, vec![1.0; m*n]);
