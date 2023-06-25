@@ -3,8 +3,8 @@ use nalgebra::UnitQuaternion;
 use simba::simd::{f32x16, f32x2, f32x4, f32x8, f64x8, SimdComplexField, SimdValue};
 use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::AD;
-use ad_trait::forward_ad::adf2::adf2;
-use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x4, adf_f32x8, adf_f64x8};
+use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x2, adf_f32x4, adf_f32x8, adf_f64x8};
+use ad_trait::reverse_ad::adr::adr;
 use ad_trait::simd::f64xn::f64xn;
 
 fn main() {
@@ -18,7 +18,6 @@ fn main() {
     }
     println!("{:?}", start.elapsed());
     println!("{:?}", q3);
-
 
     const N: usize = 8;
     let q1 = UnitQuaternion::from_euler_angles(f64xn::<N>::splat(1.0),f64xn::<N>::splat(2.0),f64xn::<N>::splat(3.0));
@@ -54,9 +53,20 @@ fn main() {
     println!("{:?}", start.elapsed());
     println!("{:?}", q3);
 
-    let q1 = UnitQuaternion::from_euler_angles(adf_f32x4::constant(1.0),adf_f32x4::constant(2.0),adf_f32x4::constant(3.0));
-    let q2 = UnitQuaternion::from_euler_angles(adf_f32x4::constant(4.0), adf_f32x4::constant(5.0),adf_f32x4::constant(6.0));
-    let mut q3 = UnitQuaternion::from_euler_angles(adf_f32x4::constant(7.0),adf_f32x4::constant(8.0),adf_f32x4::constant(9.0));
+    let q1 = UnitQuaternion::from_euler_angles(adf_f32x2::constant(1.0),adf_f32x2::constant(2.0),adf_f32x2::constant(3.0));
+    let q2 = UnitQuaternion::from_euler_angles(adf_f32x2::constant(4.0), adf_f32x2::constant(5.0),adf_f32x2::constant(6.0));
+    let mut q3 = UnitQuaternion::from_euler_angles(adf_f32x2::constant(7.0),adf_f32x2::constant(8.0),adf_f32x2::constant(9.0));
+
+    let start = Instant::now();
+    for _ in 0..1000 {
+        q3 *= q1 * q2;
+    }
+    println!("{:?}", start.elapsed());
+    println!("{:?}", q3);
+
+    let q1 = UnitQuaternion::from_euler_angles(adr::constant(1.0),adr::constant(2.0),adr::constant(3.0));
+    let q2 = UnitQuaternion::from_euler_angles(adr::constant(4.0), adr::constant(5.0),adr::constant(6.0));
+    let mut q3 = UnitQuaternion::from_euler_angles(adr::constant(7.0),adr::constant(8.0),adr::constant(9.0));
 
     let start = Instant::now();
     for _ in 0..1000 {

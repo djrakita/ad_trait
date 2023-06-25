@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use dyn_stack::{DynStack, GlobalMemBuffer};
 use faer_core::{Mat, Parallelism};
 use faer_svd::{compute_svd, compute_svd_req, ComputeVectors, SvdParams};
-use nalgebra::{DMatrix};
+use nalgebra::{DMatrix, DVector};
 use rand::{Rng, thread_rng};
 use crate::{AD, ADNumMode};
 use crate::forward_ad::adfn::adfn;
@@ -42,6 +42,9 @@ impl<D: DifferentiableBlockTrait, E: DerivativeDataTrait<D, T>, T: AD, > Differe
     }
     pub fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
         self.derivative_data.derivative(inputs, args)
+    }
+    pub fn derivative_data(&self) -> &E {
+        &self.derivative_data
     }
 }
 
@@ -303,7 +306,7 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> Ricochet<D, T> {
         let num_outputs = D::num_outputs(args);
 
         Self {
-            ricochet_data: RicochetData::new(num_inputs, num_outputs, T::tangent_size(), -100.0, 100.0, None),
+            ricochet_data: RicochetData::new(num_inputs, num_outputs, T::tangent_size(), -1., 1.0, None),
             ricochet_termination,
             p: PhantomData::default()
         }
@@ -345,17 +348,105 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeDataTrait<D,
             let new_derivative_transpose = &minimum_norm_solution_transpose + z_chain_matrix * (&previous_derivative_transpose - &minimum_norm_solution_transpose);
             let new_derivative = new_derivative_transpose.transpose();
 
+            self.ricochet_data.update_previous_derivative(&new_derivative);
+            self.ricochet_data.increment_curr_affine_space_idx();
+
             let terminate = t.terminate(&previous_derivative, &new_derivative);
 
             if terminate {
                 let mut output_value = vec![];
                 for ff in f { output_value.push(ff.value()); }
                 return (output_value, new_derivative)
-            } else {
-                self.ricochet_data.update_previous_derivative(&new_derivative);
-                self.ricochet_data.increment_curr_affine_space_idx();
             }
         }
+    }
+}
+
+pub struct SpiderForwardAD<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> {
+    spider_data: SpiderData,
+    input_templates: Vec<Vec<T>>,
+    decay_multiple: f64,
+    p: PhantomData<(D, T)>
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> SpiderForwardAD<D, T> {
+    pub fn new(args: &D::U<T>, decay_multiple: f64) -> Self {
+        let num_inputs = D::num_inputs(args);
+        let num_outputs = D::num_outputs(args);
+
+        assert!(decay_multiple > 0.0);
+        assert!(decay_multiple < 1.0);
+
+        let spider_data = SpiderData::new(num_inputs, num_outputs, T::tangent_size(), -1.0, 1.0);
+
+        let mut input_templates = vec![];
+
+        let t_mat_affines = &spider_data.t_mat_affines;
+
+        for t_mat_affine in t_mat_affines {
+            let mut curr_input_template = vec![];
+            t_mat_affine.row_iter().for_each(|x| {
+                let mut curr_input = T::constant(0.0);
+                x.iter().enumerate().for_each(|(i, y)| curr_input.set_tangent_value(i, *y) );
+                curr_input_template.push(curr_input);
+            });
+            input_templates.push(curr_input_template);
+        }
+
+        Self {
+            spider_data,
+            input_templates,
+            decay_multiple,
+            p: Default::default()
+        }
+    }
+    pub fn spider_data(&self) -> &SpiderData {
+        &self.spider_data
+    }
+    pub fn input_templates(&self) -> &Vec<Vec<T>> { &self.input_templates }
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeDataTrait<D, T> for SpiderForwardAD<D, T> {
+    fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
+        let curr_affine_space_idx = self.spider_data.curr_affine_space_idx();
+
+        let mut inputs_ad = self.input_templates[curr_affine_space_idx].clone();
+        inputs_ad.iter_mut().zip(inputs.iter()).for_each(|(x, y)| x.set_value(*y) );
+
+        let res = D::call(&inputs_ad, args);
+        let output_value: Vec<f64> = res.iter().map(|x| x.value() ).collect();
+
+        let mut f_l = DMatrix::<f64>::zeros(D::num_outputs(args), T::tangent_size());
+        res.iter().enumerate().for_each(|(row_idx, x)| {
+            let tangent_vec = x.tangent_as_vec();
+            tangent_vec.iter().enumerate().for_each(|(col_idx, y)| {
+                f_l[(row_idx, col_idx)] = *y;
+            });
+        });
+
+        // println!(" >>> {}", f_l);
+        self.spider_data.update_f_mat(&f_l);
+        self.spider_data.update_w(self.decay_multiple);
+        // self.spider_data.print_w();
+
+        let f_l = &f_l;
+        let t_l_pinv = &self.spider_data.t_mat_affine_pinvs[curr_affine_space_idx];
+        let z_l_chain = &self.spider_data.t_mat_affine_z_chains[curr_affine_space_idx];
+        let w_mat = &self.spider_data.get_w_mat();
+        let f_mat = &*self.spider_data.f_mat.read().unwrap();
+        let t_mat_pinv = &self.spider_data.t_mat_pinv;
+        // println!(" >>>> {}", f_mat);
+        // println!("{}", w_mat);
+        // let w_mat = DMatrix::<f64>::identity(4, 4);
+        println!(" >>> {}", w_mat);
+
+        let f_l_t_l_pinv = f_l * t_l_pinv;
+        let f_w_mat_t_mat_pinv = f_mat * w_mat * t_mat_pinv;
+
+        // let d = &f_l_t_l_pinv + ( &f_w_mat_t_mat_pinv - &f_l_t_l_pinv ) * z_l_chain;
+        let d = f_w_mat_t_mat_pinv;
+
+        self.spider_data.increment_curr_affine_space_idx();
+
+        return (output_value, d)
     }
 }
 
@@ -501,6 +592,111 @@ impl<T: AD + ForwardADTrait> RicochetData<T> {
     }
 }
 
+pub struct SpiderData {
+    num_affine_spaces: usize,
+    affine_space_dimension: usize,
+    f_mat: RwLock<DMatrix<f64>>,
+    t_mat: DMatrix<f64>,
+    t_mat_pinv: DMatrix<f64>,
+    t_mat_affines: Vec<DMatrix<f64>>,
+    t_mat_affine_pinvs: Vec<DMatrix<f64>>,
+    t_mat_affine_z_chains: Vec<DMatrix<f64>>,
+    w: RwLock<DVector<f64>>,
+    curr_affine_space_idx: RwLock<usize>
+}
+impl SpiderData {
+    pub fn new(num_inputs: usize, num_outputs: usize, affine_space_dimension: usize, sample_lower_bound: f64, sample_upper_bound: f64) -> Self {
+        let num_affine_spaces = (num_inputs as f64 / affine_space_dimension as f64).ceil() as usize;
+
+        let f_mat = DMatrix::<f64>::zeros(num_outputs, num_affine_spaces*affine_space_dimension);
+
+        let mut rng = thread_rng();
+
+        let mut t_mat = DMatrix::<f64>::zeros(num_inputs, num_affine_spaces*affine_space_dimension);
+        t_mat.iter_mut().for_each(|x| *x = rng.gen_range(sample_lower_bound..sample_upper_bound));
+
+        let t_mat_pinv = t_mat.clone().pseudo_inverse(0.0).unwrap();
+
+        let mut t_mat_affines: Vec<DMatrix<f64>> = vec![];
+        for i in 0..num_affine_spaces {
+            t_mat_affines.push( t_mat.view((0, affine_space_dimension*i), (num_inputs, affine_space_dimension)).into() );
+        }
+
+        let mut t_mat_affine_pinvs = vec![];
+        for a in &t_mat_affines {
+            t_mat_affine_pinvs.push( a.clone().pseudo_inverse(0.0).unwrap() );
+        }
+
+        let mut t_mat_affine_z_chains = vec![];
+        for a in &t_mat_affines {
+            let z = get_null_space_basis_matrix(&a.transpose());
+            let z_chain = &z * (&z.transpose()*&z).try_inverse().unwrap() * &z.transpose();
+            t_mat_affine_z_chains.push(z_chain);
+        }
+
+        let mut w = DVector::<f64>::zeros(num_affine_spaces*affine_space_dimension);
+
+        Self {
+            num_affine_spaces,
+            affine_space_dimension,
+            f_mat: RwLock::new(f_mat),
+            t_mat,
+            t_mat_pinv,
+            t_mat_affines,
+            t_mat_affine_pinvs,
+            t_mat_affine_z_chains,
+            w: RwLock::new(w),
+            curr_affine_space_idx: RwLock::new(0)
+        }
+    }
+    pub fn curr_affine_space_idx(&self) -> usize { self.curr_affine_space_idx.read().unwrap().clone() }
+    pub fn increment_curr_affine_space_idx(&self) {
+        let curr_idx = self.curr_affine_space_idx.read().unwrap().clone();
+        *self.curr_affine_space_idx.write().unwrap() = (curr_idx + 1) % self.num_affine_spaces;
+    }
+    pub fn update_w(&self, decay_multiple: f64) {
+        let mut w = self.w.write().unwrap();
+        let curr_affine_space_idx = self.curr_affine_space_idx();
+        w.iter_mut().for_each(|x|
+            if *x > 1.0 { *x = 1.0 }
+            else { *x *= decay_multiple  }
+        );
+
+        let start_idx = curr_affine_space_idx * self.affine_space_dimension;
+        for i in start_idx..start_idx + self.affine_space_dimension {
+            w[i] = 1.0;
+        }
+    }
+    pub fn get_w_mat(&self) -> DMatrix<f64> {
+        let mut w = self.w.read().unwrap();
+        let w_pinv = w.clone().pseudo_inverse(0.0).unwrap();
+        return &*w * &w_pinv;
+    }
+    pub fn print_w(&self) {
+        println!("{}", self.w.read().unwrap());
+    }
+    pub fn update_f_mat(&self, f_block: &DMatrix<f64>) {
+        let mut f_mat = self.f_mat.write().unwrap();
+
+        let m = f_mat.shape().0;
+
+        let s = f_block.shape();
+
+        assert_eq!(s.0, m);
+        assert_eq!(s.1, self.affine_space_dimension);
+
+        let curr_affine_space_idx = self.curr_affine_space_idx();
+
+        let start_idx = curr_affine_space_idx * self.affine_space_dimension;
+        let mut vm = f_mat.slice_mut((0, start_idx), (m, self.affine_space_dimension));
+        vm.iter_mut().zip(f_block.as_slice().iter()).for_each(|(x, y)| *x = *y);
+    }
+    pub fn print_f_mat(&self) { println!("{}", self.f_mat.read().unwrap()); }
+    pub fn print_t_mat(&self) {
+        println!("{}", self.t_mat);
+    }
+}
+
 fn faer_mat_to_nalgebra_dmatrix(mat: &Mat<f64>) -> DMatrix<f64> {
     let nrows = mat.nrows();
     let ncols = mat.ncols();
@@ -523,6 +719,38 @@ fn nalgebra_dmatrix_to_faer_mat(dmatrix: &DMatrix<f64>) -> Mat<f64> {
     let out = Mat::with_dims(nrows, ncols, |i, j| dmatrix[(i,j)]);
 
     out
+}
+
+pub fn get_null_space_basis_matrix(mat: &DMatrix<f64>) -> DMatrix<f64> {
+    let rank = mat.rank(0.0);
+    let shape = mat.shape();
+    let m = shape.0;
+    let n = shape.1;
+
+    let mut u: Mat<f64> = Mat::zeros(m, m);
+    let mut s: Mat<f64> = Mat::zeros(usize::min(m, n), 1);
+    let mut v: Mat<f64> = Mat::zeros(n, n);
+
+    let mut mem = GlobalMemBuffer::new(
+        compute_svd_req::<f64>(
+            mat.nrows(),
+            mat.ncols(),
+            ComputeVectors::Full,
+            ComputeVectors::Full,
+            Parallelism::None,
+            SvdParams::default(),
+        ).unwrap(),
+    );
+    let stack = DynStack::new(&mut mem);
+
+    let mat_faer = nalgebra_dmatrix_to_faer_mat(mat);
+    compute_svd(mat_faer.as_ref(), s.as_mut(), Some(u.as_mut()), Some(v.as_mut()), f64::EPSILON, f64::MIN_POSITIVE, Parallelism::None, stack, SvdParams::default());
+
+    let v = faer_mat_to_nalgebra_dmatrix(&v);
+
+    let z = v.view((0, rank), (n, n - rank));
+
+    return z.into()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
