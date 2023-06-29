@@ -20,17 +20,17 @@ pub trait DifferentiableBlockTrait {
     fn num_outputs<T1: AD>(args: &Self::U<T1>) -> usize;
 }
 
-pub trait DerivativeDataTrait<D: DifferentiableBlockTrait, T: AD> {
+pub trait DerivativeTrait<D: DifferentiableBlockTrait, T: AD> {
     fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct DifferentiableBlock<D: DifferentiableBlockTrait, E: DerivativeDataTrait<D, T>, T: AD, > {
+pub struct DifferentiableBlock<D: DifferentiableBlockTrait, E: DerivativeTrait<D, T>, T: AD, > {
     derivative_data: E,
     phantom_data: PhantomData<(D, T)>
 }
-impl<D: DifferentiableBlockTrait, E: DerivativeDataTrait<D, T>, T: AD, > DifferentiableBlock<D, E, T> {
+impl<D: DifferentiableBlockTrait, E: DerivativeTrait<D, T>, T: AD, > DifferentiableBlock<D, E, T> {
     pub fn new(derivative_data: E) -> Self {
         Self {
             derivative_data,
@@ -58,7 +58,7 @@ impl<D: DifferentiableBlockTrait> FiniteDifferencing<D> {
         Self { p: PhantomData::default() }
     }
 }
-impl<D: DifferentiableBlockTrait> DerivativeDataTrait<D, f64> for FiniteDifferencing<D> {
+impl<D: DifferentiableBlockTrait> DerivativeTrait<D, f64> for FiniteDifferencing<D> {
     fn derivative(&self, inputs: &[f64], args: &D::U<f64>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
@@ -90,7 +90,7 @@ impl<D: DifferentiableBlockTrait> ReverseAD<D> {
         Self { p: PhantomData::default() }
     }
 }
-impl<D: DifferentiableBlockTrait> DerivativeDataTrait<D, adr> for ReverseAD<D> {
+impl<D: DifferentiableBlockTrait> DerivativeTrait<D, adr> for ReverseAD<D> {
     fn derivative(&self, inputs: &[f64], args: &D::U<adr>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
@@ -127,7 +127,7 @@ impl<D: DifferentiableBlockTrait> ForwardAD<D> {
         Self { p: PhantomData::default() }
     }
 }
-impl<D: DifferentiableBlockTrait> DerivativeDataTrait<D, adfn<1>> for ForwardAD<D> {
+impl<D: DifferentiableBlockTrait> DerivativeTrait<D, adfn<1>> for ForwardAD<D> {
     fn derivative(&self, inputs: &[f64], args: &D::U<adfn<1>>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
@@ -166,7 +166,7 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> ForwardADMulti<D, T> {
         Self { p: PhantomData::default() }
     }
 }
-impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeDataTrait<D, T> for ForwardADMulti<D, T> {
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> for ForwardADMulti<D, T> {
     fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
@@ -221,7 +221,7 @@ impl<D: DifferentiableBlockTrait, const K: usize> FiniteDifferencingMulti<D, K> 
         Self { p: PhantomData::default() }
     }
 }
-impl<D: DifferentiableBlockTrait, const K: usize> DerivativeDataTrait<D, f64xn<K>> for FiniteDifferencingMulti<D, K> {
+impl<D: DifferentiableBlockTrait, const K: usize> DerivativeTrait<D, f64xn<K>> for FiniteDifferencingMulti<D, K> {
     fn derivative(&self, inputs: &[f64], args: &D::U<f64xn<K>>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
@@ -315,7 +315,7 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> Ricochet<D, T> {
         &self.ricochet_data
     }
 }
-impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeDataTrait<D, T> for Ricochet<D, T> {
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> for Ricochet<D, T> {
     fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
         let mut t = self.ricochet_termination.map_to_new_internal();
 
@@ -404,7 +404,7 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> SpiderForwardAD<D, T> 
     }
     pub fn input_templates(&self) -> &Vec<Vec<T>> { &self.input_templates }
 }
-impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeDataTrait<D, T> for SpiderForwardAD<D, T> {
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> for SpiderForwardAD<D, T> {
     fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
         let curr_affine_space_idx = self.spider_data.curr_affine_space_idx();
 
@@ -449,6 +449,601 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeDataTrait<D,
         return (output_value, d)
     }
 }
+
+pub struct Spider2ForwardAD<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> {
+    spider_data: Spider2Data,
+    input_templates: Vec<Vec<T>>,
+    project_onto_affine_space: bool,
+    p: PhantomData<(D, T)>
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> Spider2ForwardAD<D, T> {
+    pub fn new(args: &D::U<T>, decay_multiple: f64, project_onto_affine_space: bool) -> Self {
+        let num_inputs = D::num_inputs(args);
+        let num_outputs = D::num_outputs(args);
+
+        let spider_data = Spider2Data::new(num_inputs, num_outputs, T::tangent_size(), -1.0, 1.0, decay_multiple);
+
+        let mut input_templates = vec![];
+
+        let t_mat_affines = &spider_data.t_mat_affines;
+
+        for t_mat_affine in t_mat_affines {
+            let mut curr_input_template = vec![];
+            t_mat_affine.row_iter().for_each(|x| {
+                let mut curr_input = T::constant(0.0);
+                x.iter().enumerate().for_each(|(i, y)| curr_input.set_tangent_value(i, *y) );
+                curr_input_template.push(curr_input);
+            });
+            input_templates.push(curr_input_template);
+        }
+
+        Self {
+            spider_data,
+            input_templates,
+            project_onto_affine_space,
+            p: Default::default()
+        }
+    }
+    pub fn spider_data(&self) -> &Spider2Data {
+        &self.spider_data
+    }
+    pub fn input_templates(&self) -> &Vec<Vec<T>> { &self.input_templates }
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> for Spider2ForwardAD<D, T> {
+    fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
+        let curr_affine_space_idx = self.spider_data.curr_affine_space_idx();
+
+        let mut inputs_ad = self.input_templates[curr_affine_space_idx].clone();
+        inputs_ad.iter_mut().zip(inputs.iter()).for_each(|(x, y)| x.set_value(*y) );
+
+        let res = D::call(&inputs_ad, args);
+        let output_value: Vec<f64> = res.iter().map(|x| x.value() ).collect();
+
+        let mut f_l = DMatrix::<f64>::zeros(D::num_outputs(args), T::tangent_size());
+        res.iter().enumerate().for_each(|(row_idx, x)| {
+            let tangent_vec = x.tangent_as_vec();
+            tangent_vec.iter().enumerate().for_each(|(col_idx, y)| {
+                f_l[(row_idx, col_idx)] = *y;
+            });
+        });
+
+        self.spider_data.update_f_mat(&f_l);
+
+        let f_mat = &*self.spider_data.f_mat.read().unwrap();
+        let w_t_chain = if self.spider_data.first_pass() {
+            &self.spider_data.w_t_chains_first_pass[curr_affine_space_idx]
+        } else {
+            &self.spider_data.w_t_chains[curr_affine_space_idx]
+        };
+
+        let d_wls = f_mat * w_t_chain;
+
+        if !self.project_onto_affine_space {
+            self.spider_data.increment_curr_affine_space_idx();
+            return (output_value, d_wls);
+        }
+
+        let f_l = &f_l;
+        let t_l_pinv = &self.spider_data.t_mat_affine_pinvs[curr_affine_space_idx];
+        let t_l = &self.spider_data.t_mat_affines[curr_affine_space_idx];
+        let z_l_chain = &self.spider_data.t_mat_affine_transpose_z_chains[curr_affine_space_idx];
+
+        let d_mns = f_l * t_l_pinv;
+
+        let d = &d_mns + (&d_wls - &d_mns) * z_l_chain;
+        // let d_t = &d_mns.transpose() + z_l_chain*(&d_wls.transpose() - &d_mns.transpose());
+        // let d = d_t.transpose();
+
+        println!("{:?}", d);
+        println!("{:?}", &t_l);
+        println!("1 >>> {}", &d*t_l);
+        println!("2 >>> {}", &f_l);
+
+        self.spider_data.increment_curr_affine_space_idx();
+
+        return (output_value, d);
+    }
+}
+
+/*
+pub struct FlowForwardAD<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> {
+    flow_data: FlowData,
+    input_templates: Vec<Vec<T>>,
+    p: PhantomData<(D, T)>
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> FlowForwardAD<D, T> {
+    pub fn new(args: &D::U<T>, decay_multiple: f64) -> Self {
+        assert!(T::tangent_size() > 1);
+
+        let num_inputs = D::num_inputs(args);
+        let num_outputs = D::num_outputs(args);
+
+        let flow_data = FlowData::new(num_inputs, num_outputs, T::tangent_size()-1, -1.0, 1.0, decay_multiple);
+
+        let mut input_templates = vec![];
+
+        let t_mat_affines = &flow_data.t_mat_affines;
+
+        for t_mat_affine in t_mat_affines {
+            let mut curr_input_template = vec![];
+            t_mat_affine.row_iter().for_each(|x| {
+                let mut curr_input = T::constant(0.0);
+                x.iter().enumerate().for_each(|(i, y)| curr_input.set_tangent_value(i, *y) );
+                curr_input_template.push(curr_input);
+            });
+            input_templates.push(curr_input_template);
+        }
+
+        Self {
+            flow_data,
+            input_templates,
+            p: Default::default()
+        }
+    }
+    pub fn flow_data(&self) -> &FlowData {
+        &self.flow_data
+    }
+    pub fn input_templates(&self) -> &Vec<Vec<T>> { &self.input_templates }
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> for FlowForwardAD<D, T> {
+    fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
+        let curr_affine_space_idx = self.flow_data.curr_affine_space_idx();
+
+        let tangent_size = T::tangent_size();
+
+        let mut inputs_ad = self.input_templates[curr_affine_space_idx].clone();
+        inputs_ad.iter_mut().zip(inputs.iter()).for_each(|(x, y)| x.set_value(*y) );
+
+        let mut rng = thread_rng();
+        let mut tangent_test = DVector::<f64>::zeros(D::num_inputs(&args));
+        tangent_test.iter_mut().for_each(|x| *x = rng.gen_range(-1.0..1.0) );
+        inputs_ad.iter_mut().zip(tangent_test.iter()).for_each(|(x, y)| x.set_tangent_value(tangent_size-1, *y));
+
+        let res = D::call(&inputs_ad, args);
+        let output_value: Vec<f64> = res.iter().map(|x| x.value() ).collect();
+
+        let mut f_l = DMatrix::<f64>::zeros(D::num_outputs(args), tangent_size-1);
+        let mut f_t = DVector::<f64>::zeros(D::num_outputs(args));
+        res.iter().enumerate().for_each(|(row_idx, x)| {
+            let tangent_vec = x.tangent_as_vec();
+            tangent_vec.iter().enumerate().for_each(|(col_idx, y)| {
+                if col_idx < tangent_size-1 {
+                    f_l[(row_idx, col_idx)] = *y;
+                } else {
+                    f_t[row_idx] = *y;
+                }
+            });
+        });
+
+        self.flow_data.update_f_mat(&f_l, curr_affine_space_idx);
+
+        let f_mat = &*self.flow_data.f_mat.read().unwrap();
+        let w_t_chain = if self.flow_data.first_pass() {
+            &self.flow_data.w_t_chains_first_pass[curr_affine_space_idx]
+        } else {
+            &self.flow_data.w_t_chains[curr_affine_space_idx]
+        };
+
+        let d_wls = f_mat * w_t_chain;
+
+        println!("{}", d_wls);
+        let directional_derivative_test = &d_wls*&tangent_test;
+        println!("{:?}, {:?}", directional_derivative_test, f_t);
+        println!("{:?}", d_wls.transpose().dot(&DVector::from_vec(vec![1.,1.,1.,1.])));
+
+        todo!()
+    }
+}
+*/
+
+pub struct FlowFiniteDiff<D: DifferentiableBlockTrait> {
+    flow_data: FlowData,
+    num_test_samples: usize,
+    num_function_calls_on_previous_derivative: RwLock<usize>,
+    max_test_error_ratio_dis_from_1_on_previous_derivative: RwLock<f64>,
+    max_allowable_error_dis_from_1: f64,
+    p: PhantomData<D>
+}
+impl<D: DifferentiableBlockTrait> FlowFiniteDiff<D> {
+    pub fn new(args: &D::U<f64>, decay_multiple: f64, num_test_samples: usize, max_allowable_error_dis_from_1: f64) -> Self {
+        assert!(num_test_samples > 0);
+
+        let flow_data = FlowData::new(D::num_inputs(args), D::num_outputs(args), 1, -0.000001, 0.000001, decay_multiple);
+
+        Self {
+            flow_data,
+            num_test_samples,
+            num_function_calls_on_previous_derivative: RwLock::new(0),
+            max_test_error_ratio_dis_from_1_on_previous_derivative: RwLock::new(0.0),
+            max_allowable_error_dis_from_1,
+            p: Default::default()
+        }
+    }
+    pub fn num_function_calls_on_previous_derivative(&self) -> usize {
+        *self.num_function_calls_on_previous_derivative.read().unwrap()
+    }
+    pub fn max_test_error_ratio_dis_from_1_on_previous_derivative(&self) -> f64 {
+        *self.max_test_error_ratio_dis_from_1_on_previous_derivative.read().unwrap()
+    }
+}
+impl<D: DifferentiableBlockTrait> DerivativeTrait<D, f64> for FlowFiniteDiff<D> {
+    fn derivative(&self, inputs: &[f64], args: &D::U<f64>) -> (Vec<f64>, DMatrix<f64>) {
+        *self.num_function_calls_on_previous_derivative.write().unwrap() = 0;
+        *self.max_test_error_ratio_dis_from_1_on_previous_derivative.write().unwrap() = 0.0;
+
+        let num_inputs = inputs.len();
+        let num_outputs = D::num_outputs(args);
+
+        let f0 = D::call(inputs, args);
+        *self.num_function_calls_on_previous_derivative.write().unwrap() += 1;
+        let f0_dvec = DVector::from_vec(f0.clone());
+
+        let mut rng = thread_rng();
+
+        // delta x values for tests.  these are n x 1 vectors.
+        let mut test_perturbations = vec![];
+        for _ in 0..self.num_test_samples {
+            let mut test_tangent = vec![];
+
+            for _ in 0..num_inputs { test_tangent.push(rng.gen_range(-0.000001..0.000001)) }
+
+            test_perturbations.push(test_tangent);
+        }
+
+        // delta x values for tests.  these are n x 1 vectors
+        let test_perturbations_dvecs: Vec<DVector<f64>> = test_perturbations.iter().map(|x| DVector::from_column_slice(x)).collect();
+
+        // ground truth directional derivatives for tests.  these are m x 1 vectors.
+        let mut test_directional_derivatives = vec![];
+        for p in test_perturbations {
+            let xh = get_perturbed_inputs(inputs, &p);
+            let fh = D::call(&xh, args);
+            *self.num_function_calls_on_previous_derivative.write().unwrap() += 1;
+            let fh_dvec = DVector::<f64>::from_vec(fh);
+            let test_directional_derivative = &fh_dvec - &f0_dvec;
+            test_directional_derivatives.push(test_directional_derivative);
+        }
+
+        'l1: loop {
+            let curr_affine_space_idx = self.flow_data.curr_affine_space_idx();
+            let t_mat_affine = &self.flow_data.t_mat_affines[curr_affine_space_idx];
+            let p = t_mat_affine.as_slice();
+            let xh = get_perturbed_inputs(inputs, &p);
+            let fh = D::call(&xh, args);
+            *self.num_function_calls_on_previous_derivative.write().unwrap() += 1;
+            let fh_dvec = DVector::<f64>::from_vec(fh);
+            let directional_derivative = &fh_dvec - &f0_dvec;
+            let directional_derivative_as_dmatrix = DMatrix::from_row_slice(num_outputs, self.flow_data.affine_space_dimension, directional_derivative.as_slice());
+            self.flow_data.update_f_mat(&directional_derivative_as_dmatrix, curr_affine_space_idx);
+
+            let f_mat = &*self.flow_data.f_mat.read().unwrap();
+            let w_t_chain = &self.flow_data.w_t_chains[curr_affine_space_idx];
+            let d = f_mat * w_t_chain;
+
+            let max_allowable_error_dis_from_1 = self.max_allowable_error_dis_from_1;
+            let mut max_error = f64::NEG_INFINITY;
+            for (test_perturbation, test_directional_derivative) in test_perturbations_dvecs.iter().zip(test_directional_derivatives.iter()) {
+                let evaluation_directional_derivative = &d * test_perturbation;
+                assert_eq!(evaluation_directional_derivative.ncols(), test_directional_derivative.ncols());
+                assert_eq!(evaluation_directional_derivative.nrows(), test_directional_derivative.nrows());
+
+                for (x, y) in test_directional_derivative.iter().zip(evaluation_directional_derivative.iter()) {
+                    let ratio = (*x / *y);
+                    let error_ratio_dis_from_1 = (ratio - 1.0).abs();
+                    if error_ratio_dis_from_1 > max_allowable_error_dis_from_1 {
+                        self.flow_data.increment_curr_affine_space_idx();
+                        continue 'l1;
+                    }
+                    if error_ratio_dis_from_1 > max_error { max_error = error_ratio_dis_from_1; }
+                }
+            }
+            *self.max_test_error_ratio_dis_from_1_on_previous_derivative.write().unwrap() = max_error;
+            return (f0, d);
+        }
+    }
+}
+
+pub struct FlowForwardAD<D: DifferentiableBlockTrait> {
+    flow_data: FlowData,
+    num_test_samples: usize,
+    num_function_calls_on_previous_derivative: RwLock<usize>,
+    max_test_error_ratio_dis_from_1_on_previous_derivative: RwLock<f64>,
+    max_allowable_error_dis_from_1: f64,
+    p: PhantomData<D>
+}
+impl<D: DifferentiableBlockTrait> FlowForwardAD<D> {
+    pub fn new(args: &D::U<f64>, decay_multiple: f64, num_test_samples: usize, max_allowable_error_dis_from_1: f64) -> Self {
+        assert!(num_test_samples > 0);
+
+        let flow_data = FlowData::new(D::num_inputs(args), D::num_outputs(args), 1, -1.0, 1.0, decay_multiple);
+
+        Self {
+            flow_data,
+            num_test_samples,
+            num_function_calls_on_previous_derivative: RwLock::new(0),
+            max_test_error_ratio_dis_from_1_on_previous_derivative: RwLock::new(0.0),
+            max_allowable_error_dis_from_1,
+            p: Default::default()
+        }
+    }
+    pub fn num_function_calls_on_previous_derivative(&self) -> usize {
+        *self.num_function_calls_on_previous_derivative.read().unwrap()
+    }
+    pub fn max_test_error_ratio_dis_from_1_on_previous_derivative(&self) -> f64 {
+        *self.max_test_error_ratio_dis_from_1_on_previous_derivative.read().unwrap()
+    }
+}
+impl<D: DifferentiableBlockTrait> DerivativeTrait<D, adfn<1>> for FlowForwardAD<D> {
+    fn derivative(&self, inputs: &[f64], args: &D::U<adfn<1>>) -> (Vec<f64>, DMatrix<f64>) {
+        *self.num_function_calls_on_previous_derivative.write().unwrap() = 0;
+        *self.max_test_error_ratio_dis_from_1_on_previous_derivative.write().unwrap() = 0.0;
+
+        let num_inputs = inputs.len();
+        let num_outputs = D::num_outputs(args);
+
+        let mut rng = thread_rng();
+
+        // delta x values for tests.  these are n x 1 vectors.
+        let mut test_perturbations = vec![];
+        for _ in 0..self.num_test_samples {
+            let mut test_tangent = vec![];
+
+            for _ in 0..num_inputs { test_tangent.push(rng.gen_range(-1.0..1.0)) }
+
+            test_perturbations.push(test_tangent);
+        }
+
+        // delta x values for tests.  these are n x 1 vectors
+        let test_perturbations_dvecs: Vec<DVector<f64>> = test_perturbations.iter().map(|x| DVector::from_column_slice(x)).collect();
+
+        let mut out_values: Option<Vec<f64>> = None;
+
+        // ground truth directional derivatives for tests.  these are m x 1 vectors.
+        let mut test_directional_derivatives = vec![];
+        for p in test_perturbations {
+            let inputs: Vec<adfn<1>> = inputs.iter().zip(p.iter()).map(|(x, y)| {
+                adfn::<1>::new(*x, [*y])
+            }).collect();
+
+            let res = D::call(&inputs, args);
+            *self.num_function_calls_on_previous_derivative.write().unwrap() += 1;
+            match out_values {
+                None => { out_values = Some(recover_output_values_from_forward_ad_vec(&res)) }
+                _ => {  }
+            }
+
+            let output_tangents = recover_output_tangents_from_forward_ad_vec(&res);
+
+            // there will only be one channel here
+            test_directional_derivatives.push(DVector::<f64>::from_vec(output_tangents[0].to_owned()));
+
+            /*
+            let xh = get_perturbed_inputs(inputs, &p);
+            let fh = D::call(&xh, args);
+            *self.num_function_calls_on_previous_derivative.write().unwrap() += 1;
+            let fh_dvec = DVector::<f64>::from_vec(fh);
+            let test_directional_derivative = &fh_dvec - &f0_dvec;
+            test_directional_derivatives.push(test_directional_derivative);
+            */
+        }
+
+        'l1: loop {
+            let curr_affine_space_idx = self.flow_data.curr_affine_space_idx();
+            let t_mat_affine = &self.flow_data.t_mat_affines[curr_affine_space_idx];
+            let p = t_mat_affine.as_slice();
+            // let xh = get_perturbed_inputs(inputs, &p);
+            let inputs: Vec<adfn<1>> = inputs.iter().zip(p.iter()).map(|(x, y)| adfn::new(*x, [*y]) ).collect();
+            let res = D::call(&inputs, args);
+            *self.num_function_calls_on_previous_derivative.write().unwrap() += 1;
+            let directional_derivative = &recover_output_tangents_from_forward_ad_vec(&res)[0];
+            let directional_derivative_as_dmatrix = DMatrix::from_row_slice(num_outputs, self.flow_data.affine_space_dimension, directional_derivative.as_slice());
+            self.flow_data.update_f_mat(&directional_derivative_as_dmatrix, curr_affine_space_idx);
+
+            let f_mat = &*self.flow_data.f_mat.read().unwrap();
+            let w_t_chain = &self.flow_data.w_t_chains[curr_affine_space_idx];
+            let d = f_mat * w_t_chain;
+
+            let max_allowable_error_dis_from_1 = self.max_allowable_error_dis_from_1;
+            let mut max_error = f64::NEG_INFINITY;
+            for (test_perturbation, test_directional_derivative) in test_perturbations_dvecs.iter().zip(test_directional_derivatives.iter()) {
+                let evaluation_directional_derivative = &d * test_perturbation;
+                assert_eq!(evaluation_directional_derivative.ncols(), test_directional_derivative.ncols());
+                assert_eq!(evaluation_directional_derivative.nrows(), test_directional_derivative.nrows());
+
+                for (x, y) in test_directional_derivative.iter().zip(evaluation_directional_derivative.iter()) {
+                    let ratio = (*x / *y);
+                    let error_ratio_dis_from_1 = (ratio - 1.0).abs();
+                    if error_ratio_dis_from_1 > max_allowable_error_dis_from_1 {
+                        self.flow_data.increment_curr_affine_space_idx();
+                        continue 'l1;
+                    }
+                    if error_ratio_dis_from_1 > max_error { max_error = error_ratio_dis_from_1; }
+                }
+            }
+            *self.max_test_error_ratio_dis_from_1_on_previous_derivative.write().unwrap() = max_error;
+            return (out_values.unwrap(), d);
+        }
+    }
+}
+
+pub struct FlowForwardADMulti<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> {
+    flow_data: FlowData,
+    num_test_samples: usize,
+    num_function_calls_on_previous_derivative: RwLock<usize>,
+    max_test_error_ratio_dis_from_1_on_previous_derivative: RwLock<f64>,
+    max_allowable_error_dis_from_1: f64,
+    input_templates: Vec<Vec<T>>,
+    p: PhantomData<(D, T)>
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> FlowForwardADMulti<D, T> {
+    pub fn new(args: &D::U<T>, decay_multiple: f64, num_test_samples: usize, max_allowable_error_dis_from_1: f64) -> Self {
+        assert!(num_test_samples > 0 && num_test_samples < T::tangent_size());
+
+        let num_inputs = D::num_inputs(args);
+        let num_outputs = D::num_outputs(args);
+
+        let flow_data = FlowData::new(num_inputs, num_outputs, T::tangent_size()-num_test_samples, -1.0, 1.0, decay_multiple);
+
+        let mut input_templates = vec![];
+
+        let t_mat_affines = &flow_data.t_mat_affines;
+
+        for t_mat_affine in t_mat_affines {
+            let mut curr_input_template = vec![];
+            t_mat_affine.row_iter().for_each(|x| {
+                let mut curr_input = T::constant(0.0);
+                x.iter().enumerate().for_each(|(i, y)| curr_input.set_tangent_value(i, *y) );
+                curr_input_template.push(curr_input);
+            });
+            input_templates.push(curr_input_template);
+        }
+
+        Self {
+            flow_data,
+            num_test_samples,
+            num_function_calls_on_previous_derivative: RwLock::new(0),
+            max_test_error_ratio_dis_from_1_on_previous_derivative: RwLock::new(0.0),
+            max_allowable_error_dis_from_1,
+            input_templates,
+            p: Default::default()
+        }
+    }
+    pub fn input_templates(&self) -> &Vec<Vec<T>> { &self.input_templates }
+    pub fn num_function_calls_on_previous_derivative(&self) -> usize {
+        *self.num_function_calls_on_previous_derivative.read().unwrap()
+    }
+    pub fn max_test_error_ratio_dis_from_1_on_previous_derivative(&self) -> f64 {
+        *self.max_test_error_ratio_dis_from_1_on_previous_derivative.read().unwrap()
+    }
+}
+impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> for FlowForwardADMulti<D, T> {
+    fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
+        *self.num_function_calls_on_previous_derivative.write().unwrap() = 0;
+        *self.max_test_error_ratio_dis_from_1_on_previous_derivative.write().unwrap() = 0.0;
+
+        let n = D::num_inputs(args);
+        let m = D::num_outputs(args);
+
+        let tangent_size = T::tangent_size();
+        let num_test_samples = self.num_test_samples;
+        let test_start_channel = tangent_size - num_test_samples;
+        let mut rng = thread_rng();
+
+        let mut all_test_tangents: Vec<DVector<f64>> = vec![];
+        let mut all_test_directional_derivatives: Vec<DVector<f64>> = vec![];
+
+        'l1: loop {
+            let curr_affine_space_idx = self.flow_data.curr_affine_space_idx();
+            let mut inputs_ad = self.input_templates[curr_affine_space_idx].clone();
+
+            let mut curr_test_tangents = vec![];
+            for _ in 0..num_test_samples {
+                let curr_test_tangent: Vec<f64> = (0..n).map(|_| rng.gen_range(-1.0..1.0)).collect();
+                curr_test_tangents.push(DVector::<f64>::from_vec(curr_test_tangent));
+            }
+
+            curr_test_tangents.iter().for_each(|x| {
+               all_test_tangents.push(x.clone());
+            });
+
+            inputs_ad.iter_mut().enumerate().for_each(|(input_idx, x)| {
+                x.set_value(inputs[input_idx]);
+                curr_test_tangents.iter().enumerate().for_each(|(test_idx, y)| {
+                    x.set_tangent_value(test_idx + test_start_channel, y[input_idx]);
+                });
+            });
+
+            let res = D::call(&inputs_ad, args);
+            *self.num_function_calls_on_previous_derivative.write().unwrap() += 1;
+            let output_value = res.iter().map(|x| x.value()).collect();
+
+            let mut f_block = DMatrix::<f64>::zeros(m, self.flow_data.affine_space_dimension);
+            let mut test_directional_derivatives = vec![ DVector::<f64>::zeros(m); num_test_samples ];
+
+            res.iter().enumerate().for_each(|(output_idx, x)| {
+                let tangent_as_vec= x.tangent_as_vec();
+                for (tangent_val_idx, tangent_val) in tangent_as_vec.iter().enumerate() {
+                    if tangent_val_idx >= test_start_channel {
+                        let test_idx = tangent_val_idx - test_start_channel;
+                        test_directional_derivatives[test_idx][output_idx] = *tangent_val;
+                    } else {
+                        f_block[(output_idx, tangent_val_idx)] = *tangent_val;
+                    }
+                }
+            });
+
+            test_directional_derivatives.iter().for_each(|x| {
+               all_test_directional_derivatives.push(x.clone());
+            });
+
+            self.flow_data.update_f_mat(&f_block, curr_affine_space_idx);
+
+            let f_mat = &*self.flow_data.f_mat.read().unwrap();
+            let w_t_chain = &self.flow_data.w_t_chains[curr_affine_space_idx];
+            let d = f_mat * w_t_chain;
+
+            let max_allowable_error_dis_from_1 = self.max_allowable_error_dis_from_1;
+            let mut max_error = f64::NEG_INFINITY;
+            for (test_perturbation, test_directional_derivative) in all_test_tangents.iter().zip(all_test_directional_derivatives.iter()) {
+                let evaluation_directional_derivative = &d * test_perturbation;
+                assert_eq!(evaluation_directional_derivative.ncols(), test_directional_derivative.ncols());
+                assert_eq!(evaluation_directional_derivative.nrows(), test_directional_derivative.nrows());
+
+                for (x, y) in test_directional_derivative.iter().zip(evaluation_directional_derivative.iter()) {
+                    let ratio = (*x / *y);
+                    let error_ratio_dis_from_1 = (ratio - 1.0).abs();
+                    if error_ratio_dis_from_1 > max_allowable_error_dis_from_1 {
+                        self.flow_data.increment_curr_affine_space_idx();
+                        continue 'l1;
+                    }
+                    if error_ratio_dis_from_1 > max_error { max_error = error_ratio_dis_from_1; }
+                }
+            }
+            *self.max_test_error_ratio_dis_from_1_on_previous_derivative.write().unwrap() = max_error;
+            return (output_value, d);
+        }
+    }
+}
+
+fn get_perturbed_inputs(inputs: &[f64], perturbations: &[f64]) -> Vec<f64> {
+    assert_eq!(inputs.len(), perturbations.len());
+    return inputs.iter().zip(perturbations.iter()).map(|(x, y)| *x + *y ).collect();
+}
+
+fn recover_output_values_from_forward_ad_vec<T: AD + ForwardADTrait>(v: &Vec<T>) -> Vec<f64> {
+    v.iter().map(|x| x.value() ).collect()
+}
+
+/// includes all channels
+fn recover_output_tangents_from_forward_ad_vec<T: AD + ForwardADTrait>(v: &Vec<T>) -> Vec<Vec<f64>> {
+    let tangent_size = T::tangent_size();
+    let mut out_vec = vec![ vec![]; tangent_size ];
+    v.iter().for_each(|x| {
+        let tangent_as_vec = x.tangent_as_vec();
+        tangent_as_vec.iter().enumerate().for_each(|(i, y)| {
+            out_vec[i].push(*y);
+        });
+    });
+    out_vec
+}
+
+/*
+/// the end_channel idx is inclusive
+fn recover_output_tangents_from_forward_ad_vec_channels<T: AD + ForwardADTrait>(v: &Vec<T>, start_channel: usize, end_channel: usize) -> Vec<Vec<f64>> {
+    assert!(start_channel <= end_channel);
+    let num_channels = end_channel - start_channel + 1;
+    let mut out_vec = vec![ vec![]; num_channels ];
+    v.iter().for_each(|x| {
+        let tangent_as_vec = x.tangent_as_vec();
+        tangent_as_vec.iter().enumerate().for_each(|(i, y)| {
+            if i >= start_channel && i <= end_channel {
+                out_vec[i - start_channel].push(*y);
+            }
+        });
+    });
+    out_vec
+}
+*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -688,6 +1283,271 @@ impl SpiderData {
         let curr_affine_space_idx = self.curr_affine_space_idx();
 
         let start_idx = curr_affine_space_idx * self.affine_space_dimension;
+        let mut vm = f_mat.slice_mut((0, start_idx), (m, self.affine_space_dimension));
+        vm.iter_mut().zip(f_block.as_slice().iter()).for_each(|(x, y)| *x = *y);
+    }
+    pub fn print_f_mat(&self) { println!("{}", self.f_mat.read().unwrap()); }
+    pub fn print_t_mat(&self) {
+        println!("{}", self.t_mat);
+    }
+}
+
+pub struct Spider2Data {
+    num_affine_spaces: usize,
+    affine_space_dimension: usize,
+    f_mat: RwLock<DMatrix<f64>>,
+    t_mat: DMatrix<f64>,
+    w_t_chains_first_pass: Vec<DMatrix<f64>>,
+    w_t_chains: Vec<DMatrix<f64>>,
+    t_mat_affines: Vec<DMatrix<f64>>,
+    t_mat_affine_pinvs: Vec<DMatrix<f64>>,
+    t_mat_affine_transpose_z_chains: Vec<DMatrix<f64>>,
+    curr_affine_space_idx: RwLock<usize>,
+    first_pass: RwLock<bool>
+}
+impl Spider2Data {
+    pub fn new(num_inputs: usize, num_outputs: usize, affine_space_dimension: usize, sample_lower_bound: f64, sample_upper_bound: f64, decay_multiple: f64) -> Self {
+        assert!(0.0 < decay_multiple && decay_multiple < 1.0);
+
+        let n = num_inputs;
+        let m = num_outputs;
+        let r = affine_space_dimension;
+
+        let mut num_affine_spaces = (n as f64 / r as f64).ceil() as usize * 2;
+        // if num_affine_spaces * r <= n {  num_affine_spaces += 1; }
+
+        let k = num_affine_spaces*r;
+        let f_mat = DMatrix::<f64>::zeros(m, k);
+
+        let mut rng = thread_rng();
+
+        let mut t_mat = DMatrix::<f64>::zeros(n, k);
+        t_mat.iter_mut().for_each(|x| *x = rng.gen_range(sample_lower_bound..sample_upper_bound));
+
+        let mut w_t_chains_first_pass = vec![];
+
+        let mut curr_w = vec![0.0; k];
+        let max_weight = 10.0;
+        for curr_affine_space_idx in 0..num_affine_spaces {
+            curr_w.iter_mut().for_each(|x| {
+                if *x == max_weight { *x = 1.0; }
+                else { *x *= decay_multiple; }
+            });
+
+            let curr_start_idx = curr_affine_space_idx*r;
+            for idx in curr_start_idx..curr_start_idx+r {
+                curr_w[idx] = max_weight;
+            }
+
+            let w_mat = DMatrix::from_partial_diagonal(k, k, &curr_w);
+
+            let w_t_chain_first_pass = &w_mat*&t_mat.transpose()*&(&t_mat*&w_mat*&t_mat.transpose()).try_inverse().unwrap().transpose();
+            w_t_chains_first_pass.push(w_t_chain_first_pass);
+        }
+
+        let mut w_t_chains = vec![];
+        for curr_affine_space_idx in 0..num_affine_spaces {
+            curr_w.iter_mut().for_each(|x| {
+                if *x == max_weight { *x = 1.0; }
+                else { *x *= decay_multiple; }
+            });
+
+            let curr_start_idx = curr_affine_space_idx*r;
+            for idx in curr_start_idx..curr_start_idx+r {
+                curr_w[idx] = max_weight;
+            }
+
+            let w_mat = DMatrix::from_partial_diagonal(k, k, &curr_w);
+
+            let w_t_chain = &w_mat*&t_mat.transpose()*&(&t_mat*&w_mat*&t_mat.transpose()).try_inverse().unwrap().transpose();
+            w_t_chains.push(w_t_chain);
+        }
+
+        let mut t_mat_affines: Vec<DMatrix<f64>> = vec![];
+        for i in 0..num_affine_spaces {
+            t_mat_affines.push( t_mat.view((0, r*i), (n, r)).into() );
+        }
+
+        let mut t_mat_affine_pinvs = vec![];
+        for a in &t_mat_affines {
+            t_mat_affine_pinvs.push( a.clone().pseudo_inverse(0.0).unwrap() );
+        }
+
+        let mut t_mat_affine_transpose_z_chains = vec![];
+        for a in &t_mat_affines {
+            let z = get_null_space_basis_matrix(&a.transpose());
+            let z_chain = &z * (&z.transpose()*&z).try_inverse().unwrap() * &z.transpose();
+            t_mat_affine_transpose_z_chains.push(z_chain);
+        }
+
+        Self {
+            num_affine_spaces,
+            affine_space_dimension,
+            f_mat: RwLock::new(f_mat),
+            t_mat,
+            w_t_chains_first_pass,
+            w_t_chains,
+            t_mat_affines,
+            t_mat_affine_pinvs,
+            t_mat_affine_transpose_z_chains,
+            curr_affine_space_idx: RwLock::new(0),
+            first_pass: RwLock::new(true)
+        }
+    }
+    pub fn curr_affine_space_idx(&self) -> usize { self.curr_affine_space_idx.read().unwrap().clone() }
+    pub fn first_pass(&self) -> bool {
+        *self.first_pass.read().unwrap()
+    }
+    pub fn increment_curr_affine_space_idx(&self) {
+        let curr_idx = self.curr_affine_space_idx.read().unwrap().clone();
+        let new_idx = (curr_idx + 1) % self.num_affine_spaces;
+        if new_idx == 0 { *self.first_pass.write().unwrap() = false; }
+        *self.curr_affine_space_idx.write().unwrap() = new_idx;
+    }
+    pub fn update_f_mat(&self, f_block: &DMatrix<f64>) {
+        let mut f_mat = self.f_mat.write().unwrap();
+
+        let m = f_mat.shape().0;
+
+        let s = f_block.shape();
+
+        assert_eq!(s.0, m);
+        assert_eq!(s.1, self.affine_space_dimension);
+
+        let curr_affine_space_idx = self.curr_affine_space_idx();
+
+        let start_idx = curr_affine_space_idx * self.affine_space_dimension;
+        let mut vm = f_mat.slice_mut((0, start_idx), (m, self.affine_space_dimension));
+        vm.iter_mut().zip(f_block.as_slice().iter()).for_each(|(x, y)| *x = *y);
+    }
+    pub fn print_f_mat(&self) { println!("{}", self.f_mat.read().unwrap()); }
+    pub fn print_t_mat(&self) {
+        println!("{}", self.t_mat);
+    }
+}
+
+pub struct FlowData {
+    num_affine_spaces: usize,
+    affine_space_dimension: usize,
+    f_mat: RwLock<DMatrix<f64>>,
+    t_mat: DMatrix<f64>,
+    // w_t_chains_first_pass: Vec<DMatrix<f64>>,
+    w_t_chains: Vec<DMatrix<f64>>,
+    t_mat_affines: Vec<DMatrix<f64>>,
+    curr_affine_space_idx: RwLock<usize>,
+    first_pass: RwLock<bool>
+}
+impl FlowData {
+    pub fn new(num_inputs: usize, num_outputs: usize, affine_space_dimension: usize, sample_lower_bound: f64, sample_upper_bound: f64, decay_multiple: f64) -> Self {
+        assert!(0.0 < decay_multiple && decay_multiple < 1.0);
+
+        let n = num_inputs;
+        let m = num_outputs;
+        let r = affine_space_dimension;
+
+        let mut num_affine_spaces = (n as f64 / r as f64).ceil() as usize;
+        if num_affine_spaces * r <= n {  num_affine_spaces += 1; }
+
+        let k = num_affine_spaces*r;
+        let f_mat = DMatrix::<f64>::zeros(m, k);
+
+        let mut rng = thread_rng();
+
+        let mut t_mat = DMatrix::<f64>::zeros(n, k);
+        t_mat.iter_mut().for_each(|x| *x = rng.gen_range(sample_lower_bound..sample_upper_bound));
+
+        // let mut w_t_chains_first_pass = vec![];
+
+        let mut curr_w = vec![0.0; k];
+        // let max_weight = 10.0;
+        for curr_affine_space_idx in 0..num_affine_spaces {
+            curr_w.iter_mut().for_each(|x| {
+                // if *x == max_weight { *x = 1.0; }
+                // else { *x *= decay_multiple; }
+                *x *= decay_multiple;
+            });
+
+            let curr_start_idx = curr_affine_space_idx*r;
+            for idx in curr_start_idx..curr_start_idx+r {
+                curr_w[idx] = 1.0;
+            }
+
+            /*
+            let w_mat = DMatrix::from_partial_diagonal(k, k, &curr_w);
+
+            let try_mat = &(&t_mat*&w_mat*&t_mat.transpose()).try_inverse();
+            match try_mat {
+                Some(m) => {
+                    let w_t_chain_first_pass = &w_mat*&t_mat.transpose()*m.transpose();
+                    w_t_chains_first_pass.push(w_t_chain_first_pass);
+                }
+                None => {
+                    return Self::new(num_inputs, num_outputs, affine_space_dimension, sample_lower_bound, sample_upper_bound, decay_multiple);
+                }
+            }
+            */
+        }
+
+        let mut w_t_chains = vec![];
+        for curr_affine_space_idx in 0..num_affine_spaces {
+            curr_w.iter_mut().for_each(|x| {
+                // if *x == max_weight { *x = 1.0; }
+                // else { *x *= decay_multiple; }
+                *x *= decay_multiple;
+            });
+
+            let curr_start_idx = curr_affine_space_idx*r;
+            for idx in curr_start_idx..curr_start_idx+r {
+                curr_w[idx] = 1.0;
+            }
+
+            let w_mat = DMatrix::from_partial_diagonal(k, k, &curr_w);
+
+            let w_t_chain = &w_mat*&t_mat.transpose()*&(&t_mat*&w_mat*&t_mat.transpose()).try_inverse().unwrap().transpose();
+            w_t_chains.push(w_t_chain);
+        }
+
+        let mut t_mat_affines: Vec<DMatrix<f64>> = vec![];
+        for i in 0..num_affine_spaces {
+            t_mat_affines.push( t_mat.view((0, r*i), (n, r)).into() );
+        }
+
+        Self {
+            num_affine_spaces,
+            affine_space_dimension,
+            f_mat: RwLock::new(f_mat),
+            t_mat,
+            // w_t_chains_first_pass,
+            w_t_chains,
+            t_mat_affines,
+            curr_affine_space_idx: RwLock::new(0),
+            first_pass: RwLock::new(true)
+        }
+    }
+    pub fn curr_affine_space_idx(&self) -> usize { self.curr_affine_space_idx.read().unwrap().clone() }
+    pub fn first_pass(&self) -> bool {
+        *self.first_pass.read().unwrap()
+    }
+    pub fn increment_curr_affine_space_idx(&self) {
+        let curr_idx = self.curr_affine_space_idx.read().unwrap().clone();
+        let new_idx = (curr_idx + 1) % self.num_affine_spaces;
+        if new_idx == 0 { *self.first_pass.write().unwrap() = false; }
+        *self.curr_affine_space_idx.write().unwrap() = new_idx;
+    }
+    /// f_block expected to be num_function_outputs (m) x affine_space_dimension
+    pub fn update_f_mat(&self, f_block: &DMatrix<f64>, affine_space_idx: usize) {
+        let mut f_mat = self.f_mat.write().unwrap();
+
+        let m = f_mat.shape().0;
+
+        let s = f_block.shape();
+
+        assert_eq!(s.0, m);
+        assert_eq!(s.1, self.affine_space_dimension);
+
+        // let curr_affine_space_idx = self.curr_affine_space_idx();
+
+        let start_idx = affine_space_idx * self.affine_space_dimension;
         let mut vm = f_mat.slice_mut((0, start_idx), (m, self.affine_space_dimension));
         vm.iter_mut().zip(f_block.as_slice().iter()).for_each(|(x, y)| *x = *y);
     }
