@@ -990,8 +990,13 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> 
                 assert_eq!(evaluation_directional_derivative.nrows(), test_directional_derivative.nrows());
 
                 for (x, y) in test_directional_derivative.iter().zip(evaluation_directional_derivative.iter()) {
+                    // println!(" test directional derivative: {}", x);
+                    // println!(" evaluation directional derivative: {}", y);
+
                     let ratio = (*x / *y);
+                    // println!("ratio: {}", ratio);
                     let error_ratio_dis_from_1 = (ratio - 1.0).abs();
+                    // println!("error_ratio_dis_from_1: {}", error_ratio_dis_from_1);
                     if error_ratio_dis_from_1 > max_allowable_error_dis_from_1 {
                         self.flow_data.increment_curr_affine_space_idx();
                         continue 'l1;
