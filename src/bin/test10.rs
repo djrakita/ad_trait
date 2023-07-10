@@ -22,7 +22,7 @@ fn main() {
     )
     .unwrap(),
     );
-    let mut stack = DynStack::new(&mut mem);
+    let stack = DynStack::new(&mut mem);
 
     compute_svd(m.as_ref(), s.as_mut(), Some(u.as_mut()), Some(v.as_mut()), f64::EPSILON, f64::MIN_POSITIVE, Parallelism::None, stack, SvdParams::default());
 

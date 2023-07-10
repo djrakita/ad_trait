@@ -1,16 +1,17 @@
 use std::cmp::Ordering;
+use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::num::FpCategory;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
-use faer_core::Entity;
-use faer_core::pulp::Simd;
 use nalgebra::{Dim, Matrix, RawStorageMut};
-use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
+use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
 use crate::{AD, ADNumMode, F64};
 use crate::forward_ad::ForwardADTrait;
+use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
+use serde::de::{MapAccess, Visitor};
+use serde::ser::{SerializeStruct};
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy)]
@@ -44,6 +45,84 @@ impl<const N: usize> adfn<N> {
     #[inline]
     pub fn tangent_as_vec(&self) -> Vec<f64> {
         self.tangent.to_vec()
+    }
+}
+
+impl<const N: usize> Serialize for adfn<N> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, {
+        let mut state = serializer.serialize_struct("adfn", 2)?;
+        state.serialize_field("value", &self.value)?;
+        let tangent_as_vec: Vec<f64> = self.tangent.to_vec();
+        state.serialize_field("tangent", &tangent_as_vec)?;
+        state.end()
+    }
+}
+
+impl<'de, const N: usize> Deserialize<'de> for adfn<N> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, {
+        enum Field { Value, Tangent }
+
+        impl<'de> Deserialize<'de> for Field {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+                struct FieldVisitor;
+
+                impl<'de> Visitor<'de> for FieldVisitor {
+                    type Value = Field;
+
+                    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+                        formatter.write_str("value or tangent")
+                    }
+
+                    fn visit_str<E: de::Error>(self, value: &str) -> Result<Field, E> {
+                        match value {
+                            "value" => Ok(Field::Value),
+                            "tangent" => Ok(Field::Tangent),
+                            _ => { Err(de::Error::unknown_field(value, FIELDS)) }
+                        }
+                    }
+                }
+
+                deserializer.deserialize_identifier(FieldVisitor)
+            }
+        }
+
+        struct AdfnVisitor<const N: usize>;
+
+        impl<'de, const N: usize> Visitor<'de> for AdfnVisitor<N> {
+            type Value = adfn<N>;
+
+            fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+                formatter.write_str("struct adfn")
+            }
+
+            fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<adfn<N>, V::Error> {
+                let mut value = None;
+                let mut tangent = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Value => {
+                            if value.is_some() { return Err(de::Error::duplicate_field("value")); }
+                            value = Some(map.next_value()?);
+                        }
+                        Field::Tangent => {
+                            if tangent.is_some() { return Err(de::Error::duplicate_field("tangent")); }
+                            let tangent_as_vec = map.next_value::<Vec<f64>>()?;
+                            assert_eq!(tangent_as_vec.len(), N);
+                            let mut tangent_as_slice = [0.0; N];
+                            for (i, t) in tangent_as_vec.iter().enumerate() { tangent_as_slice[i] = *t; }
+                            tangent = Some(tangent_as_slice);
+                        }
+                    }
+                }
+
+                let value = value.ok_or_else(|| de::Error::missing_field("value"))?;
+                let tangent = tangent.ok_or_else(|| de::Error::missing_field("tangent"))?;
+                Ok(adfn::<N>{ value, tangent })
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &["value", "tangent"];
+        deserializer.deserialize_struct("adfn", FIELDS, AdfnVisitor)
     }
 }
 
@@ -1400,3 +1479,6 @@ impl<const N: usize> SubsetOf<adfn<N>> for i128 {
         false
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+

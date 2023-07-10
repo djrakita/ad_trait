@@ -1,4 +1,5 @@
-#![feature(generic_associated_types)]
+// #![feature(generic_associated_types)]
+// #![feature(const_trait_impl)]
 
 extern crate core;
 
@@ -7,15 +8,19 @@ pub mod forward_ad;
 pub mod reverse_ad;
 pub mod simd;
 
+use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
-use faer_core::Entity;
-use nalgebra::{DMatrix, DVector};
-use num_traits::{Float, Signed};
-use simba::scalar::ComplexField;
 
+
+use num_traits::{Signed};
+use simba::scalar::{ComplexField, RealField};
+use simba::simd::{SimdComplexField, SimdRealField};
+use serde::{Serialize};
+use serde::de::DeserializeOwned;
 
 pub trait AD :
+    RealField +
     ComplexField +
     PartialOrd +
     PartialEq +
@@ -35,7 +40,16 @@ pub trait AD :
     Div<F64, Output=Self> +
     DivAssign<F64> +
     Rem<F64, Output=Self> +
-    RemAssign<F64>
+    RemAssign<F64> +
+
+    From<f32> +
+    Into<f64> +
+
+    SimdRealField +
+    SimdComplexField +
+
+    Serialize +
+    DeserializeOwned
 {
     fn constant(constant: f64) -> Self;
     fn to_constant(&self) -> f64;
@@ -48,6 +62,10 @@ pub trait AD :
     fn div_r_scalar(arg1: Self, arg2: f64) -> Self;
     fn rem_l_scalar(arg1: f64, arg2: Self) -> Self;
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self;
+}
+
+pub trait ObjectAD {
+    fn to_constant(&self) -> f64;
 }
 
 #[macro_export]
@@ -292,219 +310,20 @@ macro_rules! ad_setup_f64 {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/*
-pub struct ADAnyNalgebraDMatrix {
-    pub (crate) f64: DMatrix<f64>,
-    pub (crate) f32: DMatrix<f32>
-}
-impl ADAnyNalgebraDMatrix {
-    pub fn new<T: AD>(item: &DMatrix<T>) -> Self {
-        let shape = item.shape();
-        let mut f64 = DMatrix::<f64>::zeros(shape.0, shape.1);
-        let mut f32 = DMatrix::<f32>::zeros(shape.0, shape.1);
-
-        let s = item.as_slice();
-        for (i, ss) in s.iter().enumerate() {
-            f64.as_mut_slice()[i] = ss.to_constant();
-            f32.as_mut_slice()[i] = ss.to_constant() as f32;
-        }
-
-        Self {
-            f64, f32
-        }
+impl<T: AD> ObjectAD for T {
+    fn to_constant(&self) -> f64 {
+        self.to_constant()
     }
 }
 
-#[macro_export]
-macro_rules! ad_setup_any_nalgebra_dmatrix {
-    ($( $T: ident ),*) => {
-        $(
-            impl Mul<ADAnyNalgebraDMatrix> for DMatrix<$T> {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: ADAnyNalgebraDMatrix) -> Self::Output {
-                    return &self * &rhs.$T
-                }
-            }
-
-            impl Mul<DMatrix<$T>> for ADAnyNalgebraDMatrix {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: DMatrix<$T>) -> Self::Output {
-                    &self.$T * &rhs
-                }
-            }
-
-            impl Mul<&ADAnyNalgebraDMatrix> for DMatrix<$T> {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: &ADAnyNalgebraDMatrix) -> Self::Output {
-                    return &self * &rhs.$T
-                }
-            }
-
-            impl Mul<DMatrix<$T>> for &ADAnyNalgebraDMatrix {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: DMatrix<$T>) -> Self::Output {
-                    &self.$T * &rhs
-                }
-            }
-
-            impl Mul<ADAnyNalgebraDMatrix> for &DMatrix<$T> {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: ADAnyNalgebraDMatrix) -> Self::Output {
-                    return self * &rhs.$T
-                }
-            }
-
-            impl Mul<&DMatrix<$T>> for ADAnyNalgebraDMatrix {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: &DMatrix<$T>) -> Self::Output {
-                    &self.$T * rhs
-                }
-            }
-
-            impl Mul<&ADAnyNalgebraDMatrix> for &DMatrix<$T> {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: &ADAnyNalgebraDMatrix) -> Self::Output {
-                    return self * &rhs.$T
-                }
-            }
-
-            impl Mul<&DMatrix<$T>> for &ADAnyNalgebraDMatrix {
-                type Output = DMatrix<$T>;
-
-                fn mul(self, rhs: &DMatrix<$T>) -> Self::Output {
-                    &self.$T * rhs
-                }
-            }
-
-            impl Mul<DVector<$T>> for ADAnyNalgebraDMatrix {
-                type Output = DVector<$T>;
-
-                fn mul(self, rhs: DVector<$T>) -> Self::Output {
-                    &self.$T * &rhs
-                }
-            }
-
-            impl Mul<DVector<$T>> for &ADAnyNalgebraDMatrix {
-                type Output = DVector<$T>;
-
-                fn mul(self, rhs: DVector<$T>) -> Self::Output {
-                    &self.$T * &rhs
-                }
-            }
-
-            impl Mul<&DVector<$T>> for ADAnyNalgebraDMatrix {
-                type Output = DVector<$T>;
-
-                fn mul(self, rhs: &DVector<$T>) -> Self::Output {
-                    &self.$T * rhs
-                }
-            }
-
-            impl Mul<&DVector<$T>> for &ADAnyNalgebraDMatrix {
-                type Output = DVector<$T>;
-
-                fn mul(self, rhs: &DVector<$T>) -> Self::Output {
-                    &self.$T * rhs
-                }
-            }
-        )*
-    }
-}
-*/
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*
-impl Mul<ADAnyNalgebraDMatrix> for DMatrix<f64> {
-    type Output = DMatrix<f64>;
-
-    fn mul(self, rhs: ADAnyNalgebraDMatrix) -> Self::Output {
-        return &self * &rhs.f64
-    }
-}
-impl Mul<ADAnyNalgebraDMatrix> for DMatrix<f32> {
-    type Output = DMatrix<f32>;
-
-    fn mul(self, rhs: ADAnyNalgebraDMatrix) -> Self::Output {
-        return &self * &rhs.f32
+impl PartialEq<f64> for dyn ObjectAD {
+    fn eq(&self, other: &f64) -> bool {
+        self.to_constant().eq(other)
     }
 }
 
-impl Mul<DMatrix<f64>> for ADAnyNalgebraDMatrix {
-    type Output = DMatrix<f64>;
-
-    fn mul(self, rhs: DMatrix<f64>) -> Self::Output {
-        &self.f64 * &rhs
+impl PartialOrd<f64> for dyn ObjectAD {
+    fn partial_cmp(&self, other: &f64) -> Option<Ordering> {
+        self.to_constant().partial_cmp(other)
     }
 }
-*/
-/*
-// pre deprecation
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#[derive(Clone, Debug, Copy)]
-pub struct NalgebraF64Mat <'a, R: Dim + Clone, C: Dim + Clone, S: Clone + RawStorageMut<f64, R, C>> (pub &'a Matrix<f64, R, C, S>);
-
-impl<
-    'a,
-    T: AD,
-    R1: Dim + Clone,
-    C1: Dim + Clone,
-    S1: Clone + RawStorageMut<f64, R1, C1>,
-    R2: Dim + Clone,
-    C2: Dim + Clone,
-    S2: Clone + RawStorageMut<T, R2, C2>
->
-Mul<&'a Matrix<T, R2, C2, S2>>
-for NalgebraF64Mat<'_, R1, C1, S1>
-where
-    DefaultAllocator: Allocator<T, R2, C2>,
-    DefaultAllocator: Allocator<T, R1, C2>,
-    ShapeConstraint: AreMultipliable<R1, C1, R2, C2>
-{
-    type Output = OMatrix<T, R1, C2>;
-
-    fn mul(self, rhs: &Matrix<T, R2, C2, S2>) -> Self::Output {
-        mul_nalgebra_f64_matrix_by_nalgebra_matrix(self.0, rhs)
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-fn mul_nalgebra_f64_matrix_by_nalgebra_matrix<
-    R1: Dim + Clone,
-    C1: Dim + Clone,
-    S1: Clone + RawStorageMut<f64, R1, C1>,
-    R2: Dim + Clone,
-    C2: Dim + Clone,
-    S2: Clone + RawStorageMut<T, R2, C2>,
-    T: AD>(matrix1: &Matrix<f64, R1, C1, S1>, matrix2: &Matrix<T, R2, C2, S2>) -> OMatrix<T, R1, C2>
-where
-    DefaultAllocator: Allocator<T, R2, C2>,
-    DefaultAllocator: Allocator<T, R1, C2>,
-    ShapeConstraint: AreMultipliable<R1, C1, R2, C2>
-{
-    let (num_rows1, num_cols1) = matrix1.shape();
-    let (_, num_cols2) = matrix2.shape();
-    let s1g = matrix1.shape_generic();
-    let s2g = matrix2.shape_generic();
-    let mut res = OMatrix::zeros_generic(s1g.0, s2g.1);
-
-    for c2 in 0..num_cols2 {
-        for r1 in 0..num_rows1 {
-            for c1 in 0..num_cols1 {
-                res[(r1, c2)] += T::mul_scalar(matrix1[(r1, c1)], matrix2[(c1, c2)]);
-            }
-        }
-    }
-
-    return res;
-}
-*/

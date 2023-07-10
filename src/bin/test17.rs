@@ -1,12 +1,12 @@
 #![feature(generic_associated_types)]
 
 use std::time::Instant;
-use nalgebra::{DMatrix, DVector};
-use num_traits::Pow;
-use ad_trait::AD;
-use ad_trait::differentiable_block::{DerivativeTrait, DifferentiableBlockTrait, SpiderForwardAD};
-use ad_trait::forward_ad::adf::adf_f32x2;
-use ad_trait::forward_ad::adfn::adfn;
+use nalgebra::{DMatrix};
+
+
+
+
+
 
 fn main() {
 
@@ -41,6 +41,6 @@ fn main() {
     let m = DMatrix::<f64>::new_random(n, n);
 
     let start = Instant::now();
-    let res = m.try_inverse().unwrap();
+    let _res = m.try_inverse().unwrap();
     println!("{:?}", start.elapsed());
 }

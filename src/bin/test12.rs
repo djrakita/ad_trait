@@ -2,7 +2,7 @@ use std::time::Instant;
 use ad_trait::AD;
 use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::simd::f64xn::f64xn;
-use vek::{Vec32, Vec16, Vec8, Vec4};
+use vek::{Vec16};
 
 fn main() {
     let m = 40;
@@ -17,7 +17,7 @@ fn main() {
 
     let start = Instant::now();
     for _ in 0..(m*n*q) {
-        v3 += (v1*v2);
+        v3 += v1*v2;
     }
     println!("{:?}", start.elapsed());
     println!("{:?}", v3);
@@ -29,7 +29,7 @@ fn main() {
 
     let start = Instant::now();
     for _ in 0..(m*n*q) {
-        v3 += (v1*v2);
+        v3 += v1*v2;
     }
     println!("{:?}", start.elapsed());
     println!("{:?}", v3);
@@ -40,7 +40,7 @@ fn main() {
 
     let start = Instant::now();
     for _ in 0..(m*n*q) {
-        v3 += (v1*v2);
+        v3 += v1*v2;
     }
     println!("{:?}", start.elapsed());
     println!("{:?}", v3);
@@ -51,7 +51,7 @@ fn main() {
 
     let start = Instant::now();
     for _ in 0..(m*n*q) {
-        v3 += (v1*v2);
+        v3 += v1*v2;
     }
     println!("{:?}", start.elapsed());
     println!("{:?}", v3);

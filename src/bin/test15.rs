@@ -1,9 +1,9 @@
 
 use std::time::Instant;
 use simba::scalar::ComplexField;
-use simba::simd::{f32x16, f32x2, f64x2, f64x8, SimdValue};
+use simba::simd::{f32x16, SimdValue};
 use ad_trait::AD;
-use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x2, adf_f64x2, adf_f64x8};
+use ad_trait::forward_ad::adf::{adf_f32x16};
 use ad_trait::forward_ad::adfn::adfn;
 
 fn main() {

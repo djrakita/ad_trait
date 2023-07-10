@@ -9,14 +9,14 @@ fn main() {
 
     let start = Instant::now();
     let lu = LU::new(m);
-    let res = lu.solve(&r);
+    let _res = lu.solve(&r);
     println!("{:?}", start.elapsed());
 
     let m = DMatrix::<f64>::new_random(n, n);
-    let r = DMatrix::<f64>::new_random(n, n);
+    let _r = DMatrix::<f64>::new_random(n, n);
 
     let start = Instant::now();
-    let res = m.try_inverse().unwrap();
+    let _res = m.try_inverse().unwrap();
     println!("{:?}", start.elapsed());
 
     let m = DMatrix::<f64>::new_random(n, n);
@@ -24,7 +24,7 @@ fn main() {
 
     let start = Instant::now();
     let svd = SVD::new(m, false, false);
-    let res = svd.solve(&r, 0.0);
+    let _res = svd.solve(&r, 0.0);
     println!("{:?}", start.elapsed());
 
 

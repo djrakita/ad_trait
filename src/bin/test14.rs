@@ -1,7 +1,7 @@
 
 use std::time::Instant;
 use num_traits::real::Real;
-use simba::simd::{f32x16, f32x2, f32x4, f32x8, f64x4, f64x8, SimdComplexField, SimdValue};
+use simba::simd::{f32x16, SimdComplexField, SimdValue};
 
 fn main() {
     let a = 1.01_f64;

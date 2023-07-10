@@ -2,8 +2,8 @@
 
 use num_traits::real::Real;
 use ad_trait::AD;
-use ad_trait::differentiable_block::{DerivativeTrait, DifferentiableBlockTrait, FlowData, FlowFiniteDiff, FlowForwardAD, FlowForwardADMulti, ForwardADMulti};
-use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x2, adf_f32x4};
+use ad_trait::differentiable_block::{DerivativeTrait, DifferentiableBlockTrait, FlowForwardADMulti, ForwardADMulti};
+
 use ad_trait::forward_ad::adfn::adfn;
 
 pub struct Test;

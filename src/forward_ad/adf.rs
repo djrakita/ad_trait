@@ -1,20 +1,21 @@
 use std::cmp::Ordering;
+use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::num::FpCategory;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
-use faer_core::Entity;
-use faer_core::pulp::Simd;
 use nalgebra::{Dim, Matrix, RawStorageMut};
-use num_traits::{Bounded, Float, FromPrimitive, Num, NumCast, One, Signed, ToPrimitive, Zero};
+use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
 use crate::{AD, F64, ADNumMode};
 use crate::forward_ad::ForwardADTrait;
+use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
+use serde::de::{Visitor, MapAccess};
+use serde::ser::{SerializeStruct};
 
 #[macro_export]
 macro_rules! make_adf {
-    ($t: tt, $v: tt, $s: tt, $a: tt) => {
+    ($t: tt, $v: tt, $s: tt, $a: tt, $g: tt, $b: tt) => {
         #[allow(non_camel_case_types)]
         #[derive(Clone, Debug, Copy)]
         pub struct $s {
@@ -55,6 +56,84 @@ macro_rules! make_adf {
                 }
                 out
              }
+        }
+
+        impl Serialize for $s {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, {
+                let mut state = serializer.serialize_struct($b, 2)?;
+                state.serialize_field("value", &self.value)?;
+                let tangent_as_vec: Vec<f64> = self.tangent_as_vec();
+                state.serialize_field("tangent", &tangent_as_vec)?;
+                state.end()
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $s {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, {
+                enum Field { Value, Tangent }
+
+                impl<'de> Deserialize<'de> for Field {
+                    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+                        struct FieldVisitor;
+
+                        impl<'de> Visitor<'de> for FieldVisitor {
+                            type Value = Field;
+
+                            fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+                                formatter.write_str("value or tangent")
+                            }
+
+                            fn visit_str<E: de::Error>(self, value: &str) -> Result<Field, E> {
+                                match value {
+                                    "value" => Ok(Field::Value),
+                                    "tangent" => Ok(Field::Tangent),
+                                    _ => { Err(de::Error::unknown_field(value, FIELDS)) }
+                                }
+                            }
+                        }
+
+                        deserializer.deserialize_identifier(FieldVisitor)
+                    }
+                }
+
+                struct $g;
+
+                impl<'de> Visitor<'de> for $g {
+                    type Value = $s;
+
+                    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+                        formatter.write_str("struct adf")
+                    }
+
+                    fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<$s, V::Error> {
+                        let mut value = None;
+                        let mut tangent = None;
+                        while let Some(key) = map.next_key()? {
+                            match key {
+                                Field::Value => {
+                                    if value.is_some() { return Err(de::Error::duplicate_field("value")); }
+                                    value = Some(map.next_value()?);
+                                }
+                                Field::Tangent => {
+                                    if tangent.is_some() { return Err(de::Error::duplicate_field("tangent")); }
+                                    let tangent_as_vec = map.next_value::<Vec<$v>>()?;
+                                    assert_eq!(tangent_as_vec.len(), $s::tangent_size());
+                                    // let mut tangent_as_slice = [0.0; N];
+                                    // for (i, t) in tangent_as_vec.iter().enumerate() { tangent_as_slice[i] = *t; }
+                                    tangent = Some($t::from_slice_unaligned(&tangent_as_vec));
+                                }
+                            }
+                        }
+
+                        let value = value.ok_or_else(|| de::Error::missing_field("value"))?;
+                        let tangent = tangent.ok_or_else(|| de::Error::missing_field("tangent"))?;
+                        Ok($s{ value, tangent })
+                    }
+                }
+
+                const FIELDS: &'static [&'static str] = &["value", "tangent"];
+                deserializer.deserialize_struct("adf", FIELDS, $g)
+            }
         }
 
         impl AD for $s {
@@ -306,7 +385,7 @@ macro_rules! make_adf {
             type Output = Self;
 
             #[inline]
-            fn rem(self, rhs: Self) -> Self::Output {
+            fn rem(self, _rhs: Self) -> Self::Output {
                 todo!()
                 // self - ComplexField::floor(self/rhs)*rhs
                 // self - (self / rhs).floor() * rhs
@@ -1387,10 +1466,10 @@ macro_rules! make_adf {
         }
     }
 }
-make_adf!(f32x2, f32, adf_f32x2, 2);
-make_adf!(f32x4, f32, adf_f32x4, 4);
-make_adf!(f32x8, f32, adf_f32x8, 8);
-make_adf!(f32x16, f32, adf_f32x16, 16);
-make_adf!(f64x2, f64, adf_f64x2, 2);
-make_adf!(f64x4, f64, adf_f64x4, 4);
-make_adf!(f64x8, f64, adf_f64x8, 8);
+make_adf!(f32x2, f32, adf_f32x2, 2, AdfVisitorf32x2, "adf_f32x2");
+make_adf!(f32x4, f32, adf_f32x4, 4, AdfVisitorf32x4, "adf_f32x4");
+make_adf!(f32x8, f32, adf_f32x8, 8, AdfVisitorf32x8, "adf_f32x8");
+make_adf!(f32x16, f32, adf_f32x16, 16, AdfVisitorf32x16, "adf_f32x16");
+make_adf!(f64x2, f64, adf_f64x2, 2, AdfVisitorf64x2, "adf_f64x2");
+make_adf!(f64x4, f64, adf_f64x4, 4, AdfVisitorf64x4, "adf_f64x4");
+make_adf!(f64x8, f64, adf_f64x8, 8, AdfVisitorf64x8, "adf_f64x8");

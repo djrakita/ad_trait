@@ -1,12 +1,12 @@
 
-use nalgebra::DMatrix;
-use num_traits::real::Real;
-use simba::simd::SimdValue;
+
+
+
 use ad_trait::AD;
-use ad_trait::differentiable_block::{DifferentiableBlock, DifferentiableBlockTrait, FiniteDifferencing, FiniteDifferencingMulti, ForwardAD, ForwardADMulti, ReverseAD, Ricochet, RicochetData, RicochetTermination};
-use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x2, adf_f32x4, adf_f32x8, adf_f64x2, adf_f64x4, adf_f64x8};
-use ad_trait::forward_ad::adfn::adfn;
-use ad_trait::simd::f64xn::f64xn;
+use ad_trait::differentiable_block::{DifferentiableBlock, DifferentiableBlockTrait, ForwardAD, Ricochet, RicochetTermination};
+use ad_trait::forward_ad::adf::{adf_f64x2, adf_f64x4};
+
+
 
 struct Test;
 impl DifferentiableBlockTrait for Test {
@@ -28,9 +28,9 @@ impl DifferentiableBlockTrait for Test {
 fn main() {
     let d1 = DifferentiableBlock::<Test, _, _>::new(ForwardAD::new());
     let derivative_data = Ricochet::<Test, adf_f64x2>::new(&(), RicochetTermination::MaxIters(1));
-    let mut d2 = DifferentiableBlock::<Test, _, _>::new(derivative_data);
+    let d2 = DifferentiableBlock::<Test, _, _>::new(derivative_data);
     let derivative_data = Ricochet::<Test, adf_f64x4>::new(&(), RicochetTermination::MaxIters(1));
-    let mut d3 = DifferentiableBlock::<Test, _, _>::new(derivative_data);
+    let d3 = DifferentiableBlock::<Test, _, _>::new(derivative_data);
 
     let inputs = vec![1.,2.,3.,1.,1.,1.,1.,1.];
     let res = d1.derivative(&inputs, &());

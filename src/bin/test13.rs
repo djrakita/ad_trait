@@ -1,9 +1,9 @@
 use std::time::Instant;
 use nalgebra::UnitQuaternion;
-use simba::simd::{f32x16, f32x2, f32x4, f32x8, f64x8, SimdComplexField, SimdValue};
+use simba::simd::{f32x2, SimdValue};
 use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::AD;
-use ad_trait::forward_ad::adf::{adf_f32x16, adf_f32x2, adf_f32x4, adf_f32x8, adf_f64x8};
+use ad_trait::forward_ad::adf::{adf_f32x2};
 use ad_trait::reverse_ad::adr::adr;
 use ad_trait::simd::f64xn::f64xn;
 

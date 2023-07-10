@@ -6,7 +6,7 @@ use faer_core::{Mat, Parallelism};
 use faer_svd::{compute_svd, compute_svd_req, ComputeVectors, SvdParams};
 use nalgebra::{DMatrix, DVector};
 use rand::{Rng, thread_rng};
-use crate::{AD, ADNumMode};
+use crate::{AD};
 use crate::forward_ad::adfn::adfn;
 use crate::forward_ad::ForwardADTrait;
 use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
@@ -429,7 +429,7 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> 
 
         let f_l = &f_l;
         let t_l_pinv = &self.spider_data.t_mat_affine_pinvs[curr_affine_space_idx];
-        let z_l_chain = &self.spider_data.t_mat_affine_z_chains[curr_affine_space_idx];
+        let _z_l_chain = &self.spider_data.t_mat_affine_z_chains[curr_affine_space_idx];
         let w_mat = &self.spider_data.get_w_mat();
         let f_mat = &*self.spider_data.f_mat.read().unwrap();
         let t_mat_pinv = &self.spider_data.t_mat_pinv;
@@ -438,7 +438,7 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> 
         // let w_mat = DMatrix::<f64>::identity(4, 4);
         println!(" >>> {}", w_mat);
 
-        let f_l_t_l_pinv = f_l * t_l_pinv;
+        let _f_l_t_l_pinv = f_l * t_l_pinv;
         let f_w_mat_t_mat_pinv = f_mat * w_mat * t_mat_pinv;
 
         // let d = &f_l_t_l_pinv + ( &f_w_mat_t_mat_pinv - &f_l_t_l_pinv ) * z_l_chain;
@@ -728,7 +728,7 @@ impl<D: DifferentiableBlockTrait> DerivativeTrait<D, f64> for FlowFiniteDiff<D> 
                 assert_eq!(evaluation_directional_derivative.nrows(), test_directional_derivative.nrows());
 
                 for (x, y) in test_directional_derivative.iter().zip(evaluation_directional_derivative.iter()) {
-                    let ratio = (*x / *y);
+                    let ratio = *x / *y;
                     let error_ratio_dis_from_1 = (ratio - 1.0).abs();
                     if error_ratio_dis_from_1 > max_allowable_error_dis_from_1 {
                         self.flow_data.increment_curr_affine_space_idx();
@@ -851,7 +851,7 @@ impl<D: DifferentiableBlockTrait> DerivativeTrait<D, adfn<1>> for FlowForwardAD<
                 assert_eq!(evaluation_directional_derivative.nrows(), test_directional_derivative.nrows());
 
                 for (x, y) in test_directional_derivative.iter().zip(evaluation_directional_derivative.iter()) {
-                    let ratio = (*x / *y);
+                    let ratio = *x / *y;
                     let error_ratio_dis_from_1 = (ratio - 1.0).abs();
                     if error_ratio_dis_from_1 > max_allowable_error_dis_from_1 {
                         self.flow_data.increment_curr_affine_space_idx();
@@ -993,7 +993,7 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> 
                     // println!(" test directional derivative: {}", x);
                     // println!(" evaluation directional derivative: {}", y);
 
-                    let ratio = (*x / *y);
+                    let ratio = *x / *y;
                     // println!("ratio: {}", ratio);
                     let error_ratio_dis_from_1 = (ratio - 1.0).abs();
                     // println!("error_ratio_dis_from_1: {}", error_ratio_dis_from_1);
@@ -1053,6 +1053,7 @@ fn recover_output_tangents_from_forward_ad_vec_channels<T: AD + ForwardADTrait>(
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct RicochetData<T: AD + ForwardADTrait> {
     num_affine_spaces: usize,
     previous_derivative: RwLock<DMatrix<f64>>,
@@ -1234,7 +1235,7 @@ impl SpiderData {
             t_mat_affine_z_chains.push(z_chain);
         }
 
-        let mut w = DVector::<f64>::zeros(num_affine_spaces*affine_space_dimension);
+        let w = DVector::<f64>::zeros(num_affine_spaces*affine_space_dimension);
 
         Self {
             num_affine_spaces,
@@ -1268,7 +1269,7 @@ impl SpiderData {
         }
     }
     pub fn get_w_mat(&self) -> DMatrix<f64> {
-        let mut w = self.w.read().unwrap();
+        let w = self.w.read().unwrap();
         let w_pinv = w.clone().pseudo_inverse(0.0).unwrap();
         return &*w * &w_pinv;
     }
@@ -1288,7 +1289,7 @@ impl SpiderData {
         let curr_affine_space_idx = self.curr_affine_space_idx();
 
         let start_idx = curr_affine_space_idx * self.affine_space_dimension;
-        let mut vm = f_mat.slice_mut((0, start_idx), (m, self.affine_space_dimension));
+        let mut vm = f_mat.view_mut((0, start_idx), (m, self.affine_space_dimension));
         vm.iter_mut().zip(f_block.as_slice().iter()).for_each(|(x, y)| *x = *y);
     }
     pub fn print_f_mat(&self) { println!("{}", self.f_mat.read().unwrap()); }
@@ -1318,7 +1319,7 @@ impl Spider2Data {
         let m = num_outputs;
         let r = affine_space_dimension;
 
-        let mut num_affine_spaces = (n as f64 / r as f64).ceil() as usize * 2;
+        let num_affine_spaces = (n as f64 / r as f64).ceil() as usize * 2;
         // if num_affine_spaces * r <= n {  num_affine_spaces += 1; }
 
         let k = num_affine_spaces*r;
@@ -1422,7 +1423,7 @@ impl Spider2Data {
         let curr_affine_space_idx = self.curr_affine_space_idx();
 
         let start_idx = curr_affine_space_idx * self.affine_space_dimension;
-        let mut vm = f_mat.slice_mut((0, start_idx), (m, self.affine_space_dimension));
+        let mut vm = f_mat.view_mut((0, start_idx), (m, self.affine_space_dimension));
         vm.iter_mut().zip(f_block.as_slice().iter()).for_each(|(x, y)| *x = *y);
     }
     pub fn print_f_mat(&self) { println!("{}", self.f_mat.read().unwrap()); }
@@ -1553,7 +1554,7 @@ impl FlowData {
         // let curr_affine_space_idx = self.curr_affine_space_idx();
 
         let start_idx = affine_space_idx * self.affine_space_dimension;
-        let mut vm = f_mat.slice_mut((0, start_idx), (m, self.affine_space_dimension));
+        let mut vm = f_mat.view_mut((0, start_idx), (m, self.affine_space_dimension));
         vm.iter_mut().zip(f_block.as_slice().iter()).for_each(|(x, y)| *x = *y);
     }
     pub fn print_f_mat(&self) { println!("{}", self.f_mat.read().unwrap()); }
@@ -1658,6 +1659,7 @@ impl RicochetTermination {
     }
 }
 
+#[allow(dead_code)]
 enum RicochetTerminationInternal {
     MaxIters { max_iters: usize, curr_iter_count: usize },
     MaxTime { threshold: Duration, start_instant: Instant },
