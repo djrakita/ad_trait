@@ -7,7 +7,7 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
-use nalgebra::{Dim, Matrix, RawStorageMut};
+use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
@@ -1021,6 +1021,30 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
     }
 }
 */
+
+impl<D: DimName> Mul<OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D> {
+    type Output = OPoint<adr, D>;
+
+    fn mul(self, rhs: OPoint<adr, D>) -> Self::Output {
+        let mut out_clone = rhs.clone();
+        for e in out_clone.iter_mut() {
+            *e *= self;
+        }
+        out_clone
+    }
+}
+
+impl<D: DimName> Mul<&OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D> {
+    type Output = OPoint<adr, D>;
+
+    fn mul(self, rhs: &OPoint<adr, D>) -> Self::Output {
+        let mut out_clone = rhs.clone();
+        for e in out_clone.iter_mut() {
+            *e *= self;
+        }
+        out_clone
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

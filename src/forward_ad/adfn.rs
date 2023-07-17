@@ -3,7 +3,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
-use nalgebra::{Dim, Matrix, RawStorageMut};
+use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
@@ -194,6 +194,12 @@ impl<const N: usize> ForwardADTrait for adfn<N> {
 
     fn set_tangent_value(&mut self, idx: usize, value: f64) {
         self.tangent[idx] = value;
+    }
+}
+
+impl<const N: usize> Default for adfn<N> {
+    fn default() -> Self {
+        Self::constant(0.0)
     }
 }
 
@@ -779,6 +785,7 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<ad
     }
 }
 
+
 /*
 impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<Matrix<f64, R, C, S>> for adf<N> {
     type Output = Matrix<f64, R, C, S>;
@@ -818,6 +825,30 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
     }
 }
 */
+
+impl<const N: usize, D: DimName> Mul<OPoint<adfn<N>, D>> for adfn<N> where DefaultAllocator: nalgebra::allocator::Allocator<adfn<N>, D> {
+    type Output = OPoint<adfn<N>, D>;
+
+    fn mul(self, rhs: OPoint<adfn<N>, D>) -> Self::Output {
+        let mut out_clone = rhs.clone();
+        for e in out_clone.iter_mut() {
+            *e *= self;
+        }
+        out_clone
+    }
+}
+
+impl<const N: usize, D: DimName> Mul<&OPoint<adfn<N>, D>> for adfn<N> where DefaultAllocator: nalgebra::allocator::Allocator<adfn<N>, D> {
+    type Output = OPoint<adfn<N>, D>;
+
+    fn mul(self, rhs: &OPoint<adfn<N>, D>) -> Self::Output {
+        let mut out_clone = rhs.clone();
+        for e in out_clone.iter_mut() {
+            *e *= self;
+        }
+        out_clone
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

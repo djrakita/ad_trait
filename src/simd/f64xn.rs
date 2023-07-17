@@ -3,7 +3,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
-use nalgebra::{Dim, Matrix, RawStorageMut};
+use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
@@ -159,6 +159,12 @@ impl<const N: usize> AD for f64xn<N> {
 
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
         arg1 % Self::constant(arg2)
+    }
+}
+
+impl<const N: usize> Default for f64xn<N> {
+    fn default() -> Self {
+        Self::constant(0.0)
     }
 }
 
@@ -811,6 +817,30 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
     }
 }
 */
+
+impl<const N: usize, D: DimName> Mul<OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D> {
+    type Output = OPoint<f64xn<N>, D>;
+
+    fn mul(self, rhs: OPoint<f64xn<N>, D>) -> Self::Output {
+        let mut out_clone = rhs.clone();
+        for e in out_clone.iter_mut() {
+            *e *= self;
+        }
+        out_clone
+    }
+}
+
+impl<const N: usize, D: DimName> Mul<&OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D> {
+    type Output = OPoint<f64xn<N>, D>;
+
+    fn mul(self, rhs: &OPoint<f64xn<N>, D>) -> Self::Output {
+        let mut out_clone = rhs.clone();
+        for e in out_clone.iter_mut() {
+            *e *= self;
+        }
+        out_clone
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

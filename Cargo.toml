@@ -19,6 +19,7 @@ dyn-stack = "*"
 vek = {version = "*", features = ['vec8', 'vec16', 'vec32', 'vec64'] }
 serde = { version="1.0.171", features=["derive"] }
 serde_json = { version="1.0.100" }
+nalgebra-sparse = "0.9.0"
 
 [profile.dev]
 opt-level = 3

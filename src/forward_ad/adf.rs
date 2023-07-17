@@ -3,7 +3,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
-use nalgebra::{Dim, Matrix, RawStorageMut};
+use nalgebra::{Dim, Matrix, RawStorageMut, OPoint, DimName, DefaultAllocator};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
@@ -207,6 +207,12 @@ macro_rules! make_adf {
             #[inline]
             fn set_tangent_value(&mut self, idx: usize, value: f64) {
                 self.tangent.replace(idx, value as $v)
+            }
+        }
+
+        impl Default for $s {
+            fn default() -> Self {
+                Self::constant(0.0)
             }
         }
 
@@ -802,6 +808,30 @@ macro_rules! make_adf {
             }
         }
         */
+
+        impl<D: DimName> Mul<OPoint<$s, D>> for $s where DefaultAllocator: nalgebra::allocator::Allocator<$s, D> {
+            type Output = OPoint<$s, D>;
+
+            fn mul(self, rhs: OPoint<$s, D>) -> Self::Output {
+                let mut out_clone = rhs.clone();
+                for e in out_clone.iter_mut() {
+                    *e *= self;
+                }
+                out_clone
+            }
+        }
+
+        impl<D: DimName> Mul<&OPoint<$s, D>> for $s where DefaultAllocator: nalgebra::allocator::Allocator<$s, D> {
+            type Output = OPoint<$s, D>;
+
+            fn mul(self, rhs: &OPoint<$s, D>) -> Self::Output {
+                let mut out_clone = rhs.clone();
+                for e in out_clone.iter_mut() {
+                    *e *= self;
+                }
+                out_clone
+            }
+        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////
 

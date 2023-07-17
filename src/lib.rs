@@ -11,7 +11,7 @@ pub mod simd;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
-
+use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 
 use num_traits::{Signed};
 use simba::scalar::{ComplexField, RealField};
@@ -30,6 +30,7 @@ pub trait AD :
     Copy +
     Debug +
     Display +
+    Default +
 
     Add<F64, Output=Self> +
     AddAssign<F64> +
@@ -64,9 +65,36 @@ pub trait AD :
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self;
 }
 
+
 pub trait ObjectAD {
     fn to_constant(&self) -> f64;
 }
+
+pub trait NalgebraMatMulAD<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C> + 'a>:
+    AD +
+    Mul<Matrix<Self, R, C, S>, Output=Matrix<Self, R, C, S>> +
+    Mul<&'a Matrix<Self, R, C, S>, Output=Matrix<Self, R, C, S>> +
+    Sized
+{ }
+
+pub trait NalgebraPointMulAD<'a, D: DimName>:
+    AD +
+    Mul<OPoint<Self, D>, Output=OPoint<Self, D>> +
+    Mul<&'a OPoint<Self, D>, Output=OPoint<Self, D>> +
+    Sized where DefaultAllocator: nalgebra::allocator::Allocator<Self, D>
+{ }
+
+pub trait NalgebraMatMulNoRefAD<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>:
+    AD +
+    Mul<Matrix<Self, R, C, S>, Output=Matrix<Self, R, C, S>> +
+    Sized
+{ }
+
+pub trait NalgebraPointMulNoRefAD<D: DimName>:
+    AD +
+    Mul<OPoint<Self, D>, Output=OPoint<Self, D>> +
+    Sized where DefaultAllocator: nalgebra::allocator::Allocator<Self, D>
+{ }
 
 #[macro_export]
 macro_rules! ad_setup {
