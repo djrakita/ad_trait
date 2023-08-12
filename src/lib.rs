@@ -11,7 +11,7 @@ pub mod simd;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
-use nalgebra::{ArrayStorage, Const, Dim, Matrix, RawStorageMut, Scalar};
+use nalgebra::{Dim, Matrix, RawStorageMut, Scalar};
 use num_traits::Signed;
 use simba::scalar::{ComplexField, RealField};
 use simba::simd::{SimdComplexField, SimdRealField};
@@ -52,9 +52,9 @@ pub trait AD :
     Serialize +
     DeserializeOwned +
 
-    NalgebraMatMulAD<Const<3>, Const<1>, ArrayStorage<Self, 3, 1>> +
-    NalgebraMatMulAD<Const<2>, Const<2>, ArrayStorage<Self, 2, 2>> +
-    NalgebraMatMulAD<Const<3>, Const<3>, ArrayStorage<Self, 3, 3>> +
+    // NalgebraMatMulAD<Const<3>, Const<1>, ArrayStorage<Self, 3, 1>> +
+    // NalgebraMatMulAD<Const<2>, Const<2>, ArrayStorage<Self, 2, 2>> +
+    // NalgebraMatMulAD<Const<3>, Const<3>, ArrayStorage<Self, 3, 3>> +
 {
     fn constant(constant: f64) -> Self;
     fn to_constant(&self) -> f64;
@@ -67,6 +67,8 @@ pub trait AD :
     fn div_r_scalar(arg1: Self, arg2: f64) -> Self;
     fn rem_l_scalar(arg1: f64, arg2: Self) -> Self;
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self;
+    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S>;
+    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S>;
 }
 
 
@@ -83,6 +85,7 @@ pub trait NalgebraMatMulAD<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawSto
 { }
 */
 
+/*
 pub trait NalgebraMatMulAD<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>:
     Sized
 {
@@ -96,11 +99,11 @@ impl<T: AD, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>
     fn mul_by_nalgebra_matrix(&self, other: Matrix<T, R, C, S>) -> Matrix<T, R, C, S> {
         *self * other
     }
-
     fn mul_by_nalgebra_matrix_ref<'b>(&'b self, other: &'b Matrix<T, R, C, S>) -> Matrix<T, R, C, S> {
         *self * other
     }
 }
+*/
 
 /*
 pub trait NalgebraPointMulAD<'a, D: DimName>:
@@ -110,7 +113,6 @@ pub trait NalgebraPointMulAD<'a, D: DimName>:
     Sized where DefaultAllocator: nalgebra::allocator::Allocator<Self, D>
 { }
 */
-
 // pub type OVector<T, D> = Matrix<T, D, U1, Owned<T, D, U1>>;
 // <DefaultAllocator as Allocator<T, R, C>>::Buffer
 
@@ -219,6 +221,18 @@ impl AD for f64 {
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
         arg1 % arg2
     }
+
+    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        let mut out = other.clone();
+        out.iter_mut().for_each(|x| *x *= *self);
+        out
+    }
+
+    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        let mut out = other.clone();
+        out.iter_mut().for_each(|x| *x *= *self);
+        out
+    }
 }
 
 impl AD for f32 {
@@ -264,6 +278,18 @@ impl AD for f32 {
 
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
         arg1 % arg2 as f32
+    }
+
+    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        let mut out = other.clone();
+        out.iter_mut().for_each(|x| *x *= *self);
+        out
+    }
+
+    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        let mut out = other.clone();
+        out.iter_mut().for_each(|x| *x *= *self);
+        out
     }
 }
 

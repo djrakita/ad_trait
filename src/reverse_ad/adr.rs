@@ -210,6 +210,14 @@ impl AD for adr {
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self {
         arg1 % Self::constant(arg2)
     }
+
+    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        *self * other
+    }
+
+    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        *self * other
+    }
 }
 
 /*

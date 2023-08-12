@@ -1,5 +1,5 @@
 use nalgebra::Point3;
-use ad_trait::NalgebraMatMulAD;
+use ad_trait::AD;
 use ad_trait::simd::f64xn::f64xn;
 
 fn main() {
