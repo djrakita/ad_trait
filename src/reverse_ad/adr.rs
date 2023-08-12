@@ -212,6 +212,18 @@ impl AD for adr {
     }
 }
 
+/*
+impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> NalgebraMatMulAD2<R, C, S> for adr {
+    fn mul_by_nalgebra_matrix(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        *self * other
+    }
+
+    fn mul_by_nalgebra_matrix_ref(&self, other: &Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        *self * other
+    }
+}
+*/
+
 #[derive(Debug)]
 pub struct ComputationGraph {
     nodes: RwLock<Vec<ComputationGraphNode>>
@@ -457,6 +469,9 @@ impl GlobalComputationGraph {
         let computation_graph = unsafe { _GLOBAL_COMPUTATION_GRAPHS.get_or_init(|| ComputationGraph::new()) };
         let r: *const ComputationGraph = computation_graph;
         return GlobalComputationGraph(r);
+    }
+    pub fn num_nodes(&self) -> usize {
+        unsafe { return (*self.0).nodes.read().unwrap().len() }
     }
 }
 

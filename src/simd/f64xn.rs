@@ -168,6 +168,18 @@ impl<const N: usize> Default for f64xn<N> {
     }
 }
 
+/*
+impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> NalgebraMatMulAD2<R, C, S> for f64xn<N> {
+    fn mul_by_nalgebra_matrix(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        *self * other
+    }
+
+    fn mul_by_nalgebra_matrix_ref(&self, other: &Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+        *self * other
+    }
+}
+*/
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl<const N: usize> Add<F64> for f64xn<N> {

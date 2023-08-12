@@ -216,6 +216,17 @@ macro_rules! make_adf {
             }
         }
 
+        /*
+        impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> NalgebraMatMulAD2<R, C, S> for $s {
+            fn mul_by_nalgebra_matrix(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+                *self * other
+            }
+            fn mul_by_nalgebra_matrix_ref(&self, other: &Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+                *self * other
+            }
+        }
+        */
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////
 
         impl Add<F64> for $s {

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = { version="0.32.*", features=["rand"] }
+nalgebra = { version="0.32.*", features=["rand", "alloc", "std"] }
 num-traits = "*"
 simba= { version = "*", features = ["packed_simd"] }
 approx = "*"
