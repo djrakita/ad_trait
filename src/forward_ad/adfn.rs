@@ -3,7 +3,9 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
+use bevy_reflect::Reflect;
 use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
+use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
@@ -14,7 +16,7 @@ use serde::de::{MapAccess, Visitor};
 use serde::ser::{SerializeStruct};
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Reflect)]
 pub struct adfn<const N: usize> {
     pub (crate) value: f64,
     pub (crate) tangent: [f64; N]
@@ -181,7 +183,13 @@ impl<const N: usize> AD for adfn<N> {
     fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
         *self * other
     }
+
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+        other * *self
+    }
 }
+
+impl<const N: usize> ScalarOperand for adfn<N> { }
 
 impl<const N: usize> ForwardADTrait for adfn<N> {
     fn value(&self) -> f64 {

@@ -11,11 +11,13 @@ pub mod simd;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
+use bevy_reflect::Reflect;
 use nalgebra::{Dim, Matrix, RawStorageMut, Scalar};
+use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::Signed;
 use simba::scalar::{ComplexField, RealField};
 use simba::simd::{SimdComplexField, SimdRealField};
-use serde::{Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::DeserializeOwned;
 
 pub trait AD :
@@ -52,9 +54,9 @@ pub trait AD :
     Serialize +
     DeserializeOwned +
 
-    // NalgebraMatMulAD<Const<3>, Const<1>, ArrayStorage<Self, 3, 1>> +
-    // NalgebraMatMulAD<Const<2>, Const<2>, ArrayStorage<Self, 2, 2>> +
-    // NalgebraMatMulAD<Const<3>, Const<3>, ArrayStorage<Self, 3, 3>> +
+    Reflect +
+
+    ScalarOperand
 {
     fn constant(constant: f64) -> Self;
     fn to_constant(&self) -> f64;
@@ -69,8 +71,8 @@ pub trait AD :
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self;
     fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S>;
     fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S>;
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D>;
 }
-
 
 pub trait ObjectAD {
     fn to_constant(&self) -> f64;
@@ -233,6 +235,10 @@ impl AD for f64 {
         out.iter_mut().for_each(|x| *x *= *self);
         out
     }
+
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+        other * *self
+    }
 }
 
 impl AD for f32 {
@@ -290,6 +296,10 @@ impl AD for f32 {
         let mut out = other.clone();
         out.iter_mut().for_each(|x| *x *= *self);
         out
+    }
+
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+        other * *self
     }
 }
 
@@ -471,4 +481,23 @@ impl PartialOrd<f64> for dyn ObjectAD {
     fn partial_cmp(&self, other: &f64) -> Option<Ordering> {
         self.to_constant().partial_cmp(other)
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Custom serializer for the AD trait
+pub fn ad_custom_serialize<S, T: AD>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_f64(value.to_constant())
+}
+
+// Custom deserializer for the AD trait
+pub fn ad_custom_deserialize<'de, D, T: AD>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let constant = f64::deserialize(deserializer)?;
+    Ok(T::constant(constant))
 }

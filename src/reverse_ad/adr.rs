@@ -7,7 +7,9 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
+use bevy_reflect::Reflect;
 use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
+use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
@@ -18,10 +20,13 @@ use serde::de::{MapAccess, Visitor};
 use serde::ser::{SerializeStruct};
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Reflect)]
+#[reflect(from_reflect = false)]
 pub struct adr {
     value: f64,
+    #[reflect(ignore)]
     node_idx: NodeIdx,
+    #[reflect(ignore)]
     computation_graph: &'static ComputationGraph
 }
 impl Debug for adr {
@@ -218,7 +223,13 @@ impl AD for adr {
     fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
         *self * other
     }
+
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+        other * *self
+    }
 }
+
+impl ScalarOperand for adr { }
 
 /*
 impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> NalgebraMatMulAD2<R, C, S> for adr {

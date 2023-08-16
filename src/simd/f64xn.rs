@@ -11,9 +11,11 @@ use crate::{AD, ADNumMode, F64};
 use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
 use serde::de::{MapAccess, Visitor};
 use serde::ser::{SerializeStruct};
+use bevy_reflect::Reflect;
+use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 
 #[allow(non_camel_case_types)]
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Reflect)]
 pub struct f64xn<const N: usize> {
     pub (crate) value: [f64; N]
 }
@@ -168,7 +170,13 @@ impl<const N: usize> AD for f64xn<N> {
     fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
         *self * other
     }
+
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+        other * *self
+    }
 }
+
+impl<const N: usize> ScalarOperand for f64xn<N> { }
 
 impl<const N: usize> Default for f64xn<N> {
     fn default() -> Self {

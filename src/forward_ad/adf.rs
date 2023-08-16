@@ -12,14 +12,19 @@ use crate::forward_ad::ForwardADTrait;
 use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
 use serde::de::{Visitor, MapAccess};
 use serde::ser::{SerializeStruct};
+use bevy_reflect::Reflect;
+use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
+
 
 #[macro_export]
 macro_rules! make_adf {
     ($t: tt, $v: tt, $s: tt, $a: tt, $g: tt, $b: tt) => {
         #[allow(non_camel_case_types)]
-        #[derive(Clone, Debug, Copy)]
+        #[derive(Clone, Debug, Copy, Reflect)]
+        #[reflect(from_reflect = false)]
         pub struct $s {
             pub (crate) value: f64,
+            #[reflect(ignore)]
             pub (crate) tangent: $t
         }
         impl $s {
@@ -189,7 +194,13 @@ macro_rules! make_adf {
             fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
                 *self * other
             }
+
+            fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+        other * *self
+    }
         }
+
+        impl ScalarOperand for $s { }
 
         impl ForwardADTrait for $s {
             #[inline]
