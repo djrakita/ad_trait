@@ -19,6 +19,7 @@ use simba::scalar::{ComplexField, RealField};
 use simba::simd::{SimdComplexField, SimdRealField};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::DeserializeOwned;
+use serde_with::{DeserializeAs, SerializeAs};
 
 pub trait AD :
     RealField +
@@ -500,4 +501,17 @@ where
 {
     let constant = f64::deserialize(deserializer)?;
     Ok(T::constant(constant))
+}
+
+pub struct SerdeAD<T: AD>(pub T);
+
+impl<T: AD> SerializeAs<T> for SerdeAD<T> {
+    fn serialize_as<S>(source: &T, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        ad_custom_serialize(source, serializer)
+    }
+}
+impl<'de, T: AD> DeserializeAs<'de, T> for SerdeAD<T> {
+    fn deserialize_as<D>(deserializer: D) -> Result<T, D::Error> where D: Deserializer<'de> {
+        ad_custom_deserialize(deserializer)
+    }
 }
