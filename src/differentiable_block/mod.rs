@@ -10,34 +10,37 @@ use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
 use crate::simd::f64xn::f64xn;
 
 pub trait DifferentiableFunctionTrait {
-    type U<T: AD>;
+    type ArgsType<T: AD>;
 
-    fn call<T1: AD>(inputs: &[T1], args: &Self::U<T1>) -> Vec<T1>;
-    fn num_inputs<T1: AD>(args: &Self::U<T1>) -> usize;
-    fn num_outputs<T1: AD>(args: &Self::U<T1>) -> usize;
+    fn call<T1: AD>(inputs: &[T1], args: &Self::ArgsType<T1>) -> Vec<T1>;
+    fn num_inputs<T1: AD>(args: &Self::ArgsType<T1>) -> usize;
+    fn num_outputs<T1: AD>(args: &Self::ArgsType<T1>) -> usize;
 }
 
-pub trait DerivativeMethodTrait<D: DifferentiableFunctionTrait, T: AD> {
-    fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>);
+pub trait DerivativeMethodTrait<D: DifferentiableFunctionTrait> {
+    type T: AD;
+
+    fn new() -> Self;
+    fn derivative(&self, inputs: &[f64], args: &D::ArgsType<Self::T>) -> (Vec<f64>, DMatrix<f64>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct DifferentiableBlock<D: DifferentiableFunctionTrait, E: DerivativeMethodTrait<D, T>, T: AD> {
+pub struct DifferentiableBlock<D: DifferentiableFunctionTrait, E: DerivativeMethodTrait<D>> {
     derivative_method: E,
-    phantom_data: PhantomData<(D, T)>
+    phantom_data: PhantomData<D>
 }
-impl<D: DifferentiableFunctionTrait, E: DerivativeMethodTrait<D, T>, T: AD> DifferentiableBlock<D, E, T> {
-    pub fn new(derivative_method: E) -> Self {
+impl<D: DifferentiableFunctionTrait, E: DerivativeMethodTrait<D>> DifferentiableBlock<D, E> {
+    pub fn new() -> Self {
         Self {
-            derivative_method,
+            derivative_method: E::new(),
             phantom_data: Default::default()
         }
     }
-    pub fn call<T1: AD>(&self, inputs: &[T1], args: &D::U<T1>) -> Vec<T1> {
+    pub fn call<T1: AD>(&self, inputs: &[T1], args: &D::ArgsType<T1>) -> Vec<T1> {
         D::call(inputs, args)
     }
-    pub fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
+    pub fn derivative(&self, inputs: &[f64], args: &D::ArgsType<E::T>) -> (Vec<f64>, DMatrix<f64>) {
         self.derivative_method.derivative(inputs, args)
     }
     pub fn derivative_data(&self) -> &E {
@@ -50,13 +53,13 @@ impl<D: DifferentiableFunctionTrait, E: DerivativeMethodTrait<D, T>, T: AD> Diff
 pub struct FiniteDifferencing<D: DifferentiableFunctionTrait> {
     p: PhantomData<D>
 }
-impl<D: DifferentiableFunctionTrait> FiniteDifferencing<D> {
-    pub fn new() -> Self {
+impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D> for FiniteDifferencing<D> {
+    type T = f64;
+
+    fn new() -> Self {
         Self { p: PhantomData::default() }
     }
-}
-impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D, f64> for FiniteDifferencing<D> {
-    fn derivative(&self, inputs: &[f64], args: &D::U<f64>) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative(&self, inputs: &[f64], args: &D::ArgsType<Self::T>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -82,13 +85,13 @@ impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D, f64> for FiniteDif
 pub struct ReverseAD<D: DifferentiableFunctionTrait> {
     p: PhantomData<D>
 }
-impl<D: DifferentiableFunctionTrait> ReverseAD<D> {
-    pub fn new() -> Self {
+impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D> for ReverseAD<D> {
+    type T = adr;
+
+    fn new() -> Self {
         Self { p: PhantomData::default() }
     }
-}
-impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D, adr> for ReverseAD<D> {
-    fn derivative(&self, inputs: &[f64], args: &D::U<adr>) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative(&self, inputs: &[f64], args: &D::ArgsType<Self::T>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -119,13 +122,13 @@ impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D, adr> for ReverseAD
 pub struct ForwardAD<D: DifferentiableFunctionTrait> {
     p: PhantomData<D>
 }
-impl<D: DifferentiableFunctionTrait> ForwardAD<D> {
-    pub fn new() -> Self {
+impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D> for ForwardAD<D> {
+    type T = adfn<1>;
+
+    fn new() -> Self {
         Self { p: PhantomData::default() }
     }
-}
-impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D, adfn<1>> for ForwardAD<D> {
-    fn derivative(&self, inputs: &[f64], args: &D::U<adfn<1>>) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative(&self, inputs: &[f64], args: &D::ArgsType<Self::T>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -155,16 +158,16 @@ impl<D: DifferentiableFunctionTrait> DerivativeMethodTrait<D, adfn<1>> for Forwa
     }
 }
 
-pub struct ForwardADMulti<D: DifferentiableFunctionTrait, T: AD + ForwardADTrait> {
-    p: PhantomData<(D, T)>
+pub struct ForwardADMulti<D: DifferentiableFunctionTrait, A: AD + ForwardADTrait> {
+    p: PhantomData<(D, A)>
 }
-impl<D: DifferentiableFunctionTrait, T: AD + ForwardADTrait> ForwardADMulti<D, T> {
-    pub fn new() -> Self {
+impl<D: DifferentiableFunctionTrait, A: AD + ForwardADTrait> DerivativeMethodTrait<D> for ForwardADMulti<D, A> {
+    type T = A;
+
+    fn new() -> Self {
         Self { p: PhantomData::default() }
     }
-}
-impl<D: DifferentiableFunctionTrait, T: AD + ForwardADTrait> DerivativeMethodTrait<D, T> for ForwardADMulti<D, T> {
-    fn derivative(&self, inputs: &[f64], args: &D::U<T>) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative(&self, inputs: &[f64], args: &D::ArgsType<Self::T>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -172,12 +175,12 @@ impl<D: DifferentiableFunctionTrait, T: AD + ForwardADTrait> DerivativeMethodTra
 
         let mut curr_idx = 0;
 
-        let k = T::tangent_size();
+        let k = Self::T::tangent_size();
         'l1: loop {
             let mut inputs_ad = vec![];
             for input in inputs.iter() {
                 // inputs_ad.push(adf::new(*input, [0.0; K]))
-                inputs_ad.push(T::constant(*input));
+                inputs_ad.push(Self::T::constant(*input));
             }
 
             'l2: for i in 0..k {
@@ -212,14 +215,15 @@ impl<D: DifferentiableFunctionTrait, T: AD + ForwardADTrait> DerivativeMethodTra
 pub struct FiniteDifferencingMulti<D: DifferentiableFunctionTrait, const K: usize> {
     p: PhantomData<D>
 }
-impl<D: DifferentiableFunctionTrait, const K: usize> FiniteDifferencingMulti<D, K> {
-    pub fn new() -> Self {
+impl<D: DifferentiableFunctionTrait, const K: usize> DerivativeMethodTrait<D> for FiniteDifferencingMulti<D, K> {
+    type T = f64xn<K>;
+
+    fn new() -> Self {
         assert!(K > 1);
         Self { p: PhantomData::default() }
     }
-}
-impl<D: DifferentiableFunctionTrait, const K: usize> DerivativeMethodTrait<D, f64xn<K>> for FiniteDifferencingMulti<D, K> {
-    fn derivative(&self, inputs: &[f64], args: &D::U<f64xn<K>>) -> (Vec<f64>, DMatrix<f64>) {
+
+    fn derivative(&self, inputs: &[f64], args: &D::ArgsType<Self::T>) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = D::num_outputs(args);
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
