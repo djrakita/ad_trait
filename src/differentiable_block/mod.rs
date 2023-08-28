@@ -547,7 +547,6 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> 
     }
 }
 */
-
 /*
 pub struct FlowForwardAD<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> {
     flow_data: FlowData,
@@ -638,7 +637,6 @@ impl<D: DifferentiableBlockTrait, T: AD + ForwardADTrait> DerivativeTrait<D, T> 
     }
 }
 */
-
 /*
 pub struct FlowFiniteDiff<D: DifferentiableBlockTrait> {
     flow_data: FlowData,
