@@ -22,17 +22,11 @@ impl DifferentiableFunctionTrait for Test {
 }
 
 fn main() {
-    let differentiable_block = DifferentiableBlock::<Test, ReverseAD<_>>::new();
-    let f = differentiable_block.call(&[1.0, 2.0], &());
-    println!("{:?}", f);
-    let (f, df_dx) = differentiable_block.derivative(&[1.0, 2.0], &());
-    println!("{:?}", (f, df_dx));
+    let differentiable_block = DifferentiableBlock::<Test, ReverseAD>::new();
+    let res = differentiable_block.derivative(&[1.,2.], &());
+    println!("{:?}", res);
 
-    println!("---");
-
-    let differentiable_block = DifferentiableBlock::<Test, ForwardADMulti<_, adf_f32x16>>::new();
-    let f = differentiable_block.call(&[1.0, 2.0], &());
-    println!("{:?}", f);
-    let (f, df_dx) = differentiable_block.derivative(&[1.0, 2.0], &());
-    println!("{:?}", (f, df_dx));
+    let differentiable_block = DifferentiableBlock::<Test, ForwardADMulti<adf_f32x16>>::new();
+    let res = differentiable_block.derivative(&[1.,2.], &());
+    println!("{:?}", res);
 }
