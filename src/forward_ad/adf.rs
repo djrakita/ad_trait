@@ -7,6 +7,7 @@ use nalgebra::{Dim, Matrix, RawStorageMut, OPoint, DimName, DefaultAllocator};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
+// use packed_simd_2::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
 use crate::{AD, F64, ADNumMode};
 use crate::forward_ad::ForwardADTrait;
 use serde::{Serialize, Deserialize, Serializer, de, Deserializer};

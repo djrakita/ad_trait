@@ -3,7 +3,7 @@
 
 extern crate core;
 
-pub mod differentiable_block;
+pub mod differentiable_function;
 pub mod forward_ad;
 pub mod reverse_ad;
 pub mod simd;

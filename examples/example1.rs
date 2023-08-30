@@ -1,6 +1,5 @@
 use ad_trait::AD;
-use ad_trait::differentiable_block::{DifferentiableBlock, DifferentiableFunctionTrait, ForwardADMulti, ReverseAD};
-use ad_trait::forward_ad::adf::adf_f32x16;
+use ad_trait::differentiable_function::{DifferentiableFunctionTrait, ForwardAD, ReverseAD};
 
 pub struct Test;
 impl DifferentiableFunctionTrait for Test {
@@ -22,11 +21,9 @@ impl DifferentiableFunctionTrait for Test {
 }
 
 fn main() {
-    let differentiable_block = DifferentiableBlock::<Test, ReverseAD>::new();
-    let res = differentiable_block.derivative(&[1.,2.], &());
+    let res = Test::derivative::<ReverseAD>(&[1.,2.], &(), &());
     println!("{:?}", res);
 
-    let differentiable_block = DifferentiableBlock::<Test, ForwardADMulti<adf_f32x16>>::new();
-    let res = differentiable_block.derivative(&[1.,2.], &());
+    let res = Test::derivative::<ForwardAD>(&[1.,2.], &(), &());
     println!("{:?}", res);
 }

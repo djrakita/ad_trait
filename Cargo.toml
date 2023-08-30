@@ -8,7 +8,9 @@ edition = "2021"
 [dependencies]
 nalgebra = { version="0.32.*", features=["rand", "alloc", "std"] }
 num-traits = "*"
-simba= { version = "*", features = ["packed_simd"] }
+simba= { version = "0.8.1", features = ["packed_simd"] }
+# simba= { version = "0.8.1" }
+# packed_simd_2 = { version="0.3.8" }
 approx = "*"
 rand = "*"
 once_cell = "*"
