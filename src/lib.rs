@@ -4,6 +4,7 @@
 extern crate core;
 
 pub mod differentiable_function;
+pub mod differentiable_block;
 pub mod forward_ad;
 pub mod reverse_ad;
 pub mod simd;
@@ -180,6 +181,8 @@ pub enum ADNumMode {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+pub trait FloatADTrait: AD { }
+
 impl AD for f64 {
     fn constant(v: f64) -> Self {
         return v;
@@ -241,6 +244,7 @@ impl AD for f64 {
         other * *self
     }
 }
+impl FloatADTrait for f64 { }
 
 impl AD for f32 {
     fn constant(v: f64) -> Self {
@@ -303,6 +307,7 @@ impl AD for f32 {
         other * *self
     }
 }
+impl FloatADTrait for f32 { }
 
 /*
 #[macro_export]
