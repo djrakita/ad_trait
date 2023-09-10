@@ -28,4 +28,16 @@ impl<D: DifferentiableFunctionTrait, E: DerivativeMethodTrait> DifferentiableBlo
     pub fn update_args<U: Fn(&mut D::ArgsType<f64>, &mut D::ArgsType<E::T>) >(&mut self, update_fn: U) {
         (update_fn)(&mut self.function_standard_args, &mut self.function_derivative_args)
     }
+
+    pub fn function_standard_args(&self) -> &D::ArgsType<f64> {
+        &self.function_standard_args
+    }
+
+    pub fn function_derivative_args(&self) -> &D::ArgsType<E::T> {
+        &self.function_derivative_args
+    }
+
+    pub fn derivative_method_data(&self) -> &E::DerivativeMethodData {
+        &self.derivative_method_data
+    }
 }
