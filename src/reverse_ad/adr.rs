@@ -373,7 +373,7 @@ impl NodeType {
             NodeType::Div => { tiny_vec!([f64; 2] => 1.0/parent_1.unwrap(), -parent_0.unwrap()/(parent_1.unwrap()*parent_1.unwrap())) }
             NodeType::Neg => { tiny_vec!([f64; 2] => -1.0)  }
             NodeType::Abs => {
-                let val = parent_1.unwrap();
+                let val = parent_0.unwrap();
                 if val >= 0.0 { tiny_vec!([f64; 2] => 1.0) } else { tiny_vec!([f64; 2] => -1.0)  }
             }
             NodeType::Signum => {

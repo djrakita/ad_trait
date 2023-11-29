@@ -510,7 +510,6 @@ where
     let constant = f64::deserialize(deserializer)?;
     Ok(T::constant(constant))
 }
-
 pub struct SerdeAD<T: AD>(pub T);
 
 impl<T: AD> SerializeAs<T> for SerdeAD<T> {

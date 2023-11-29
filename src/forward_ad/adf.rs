@@ -15,8 +15,6 @@ use serde::de::{Visitor, MapAccess};
 use serde::ser::{SerializeStruct};
 use bevy_reflect::Reflect;
 use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
-
-
 #[macro_export]
 macro_rules! make_adf {
     ($t: tt, $v: tt, $s: tt, $a: tt, $g: tt, $b: tt) => {
