@@ -1,7 +1,7 @@
+use std::borrow::Cow;
 use ad_trait::AD;
-use ad_trait::differentiable_block::{DifferentiableBlock2};
-use ad_trait::differentiable_function::{DifferentiableFunctionClass, DifferentiableFunctionTrait2, ForwardAD2};
-use ad_trait::forward_ad::adfn::adfn;
+use ad_trait::differentiable_block::DifferentiableBlock2;
+use ad_trait::differentiable_function::{DifferentiableFunctionClass, DifferentiableFunctionTrait2, FiniteDifferencing2};
 
 pub struct TestClass;
 impl TestClass {
@@ -76,14 +76,7 @@ impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test2<'a, T> {
 }
 
 fn main() {
-
-    let d = ForwardAD2::new();
-    let t1 = Test2::new(&1.0);
-    let binding = adfn::new_constant(1.0);
-    let t2 = Test2::new(&binding);
-    let dd = DifferentiableBlock2::new_borrowed(&t1, &t2, d);
-
+    let dd = DifferentiableBlock2::new(TestClass, FiniteDifferencing2::new(), Cow::Owned(Test), Cow::Owned(Test));
     let res = dd.derivative(&[1.0]);
-
     println!("{:?}", res);
 }

@@ -15,6 +15,8 @@ use serde::de::{Visitor, MapAccess};
 use serde::ser::{SerializeStruct};
 use bevy_reflect::Reflect;
 use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
+use crate::ADNumType;
+
 #[macro_export]
 macro_rules! make_adf {
     ($t: tt, $v: tt, $s: tt, $a: tt, $g: tt, $b: tt) => {
@@ -153,6 +155,10 @@ macro_rules! make_adf {
             }
 
             fn ad_num_mode() -> ADNumMode {ADNumMode::ForwardAD}
+
+            fn ad_num_type() -> ADNumType {
+                ADNumType::ADF
+            }
 
             fn add_scalar(arg1: f64, arg2: Self) -> Self {
                 Self::constant(arg1) + arg2

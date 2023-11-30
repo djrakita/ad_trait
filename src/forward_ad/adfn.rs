@@ -9,7 +9,7 @@ use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-use crate::{AD, ADNumMode, F64};
+use crate::{AD, ADNumMode, ADNumType, F64};
 use crate::forward_ad::ForwardADTrait;
 use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
 use serde::de::{MapAccess, Visitor};
@@ -142,6 +142,10 @@ impl<const N: usize> AD for adfn<N> {
 
     fn ad_num_mode() -> ADNumMode {
         ADNumMode::ForwardAD
+    }
+
+    fn ad_num_type() -> ADNumType {
+        ADNumType::ADFN
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {

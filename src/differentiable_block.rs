@@ -1,7 +1,6 @@
 use std::borrow::Cow;
-use std::marker::PhantomData;
 use nalgebra::DMatrix;
-use crate::differentiable_function::{DerivativeMethodTrait, DerivativeMethodTrait2, DifferentiableFunctionTrait, DifferentiableFunctionTrait2};
+use crate::differentiable_function::{DerivativeMethodTrait, DerivativeMethodTrait2, DifferentiableFunctionClass, DifferentiableFunctionTrait, DifferentiableFunctionTrait2};
 
 pub struct DifferentiableBlock<'a, D: DifferentiableFunctionTrait, E: DerivativeMethodTrait, AP: DifferentiableBlockArgPrepTrait<'a, D, E>> {
     function_standard_args: D::ArgsType<'a, f64>,
@@ -107,6 +106,7 @@ impl<'a, E: DerivativeMethodTrait2> DifferentiableBlock2<'a, E> {
 }
 */
 
+/*
 pub struct DifferentiableBlock2<'a, E: DerivativeMethodTrait2, D1: DifferentiableFunctionTrait2<'a, f64>, D2: DifferentiableFunctionTrait2<'a, E::T>> {
     function_standard: Cow<'a, D1>,
     function_derivative: Cow<'a, D2>,
@@ -114,14 +114,23 @@ pub struct DifferentiableBlock2<'a, E: DerivativeMethodTrait2, D1: Differentiabl
     phantom_data: PhantomData<&'a ()>
 }
 impl<'a, E: DerivativeMethodTrait2, D1: DifferentiableFunctionTrait2<'a, f64>, D2: DifferentiableFunctionTrait2<'a, E::T>> DifferentiableBlock2<'a, E, D1, D2> {
-    pub fn new_owned(function_standard: D1, function_derivative: D2, derivative_method: E) -> Self {
+    pub fn new(function_standard: Cow<'a, D1>, function_derivative: Cow<'a, D2>, derivative_method: E) -> Self {
         assert_eq!(function_derivative.type_string(), function_standard.type_string(), "differentiable block must have functions of the same type");
-        Self { function_standard: Cow::Owned(function_standard), function_derivative: Cow::Owned(function_derivative), derivative_method, phantom_data: Default::default() }
+        Self { function_standard, function_derivative, derivative_method, phantom_data: Default::default() }
+    }
+
+    pub fn new_owned(function_standard: D1, function_derivative: D2, derivative_method: E) -> Self {
+        let function_standard = Cow::Owned(function_standard);
+        let function_derivative = Cow::Owned(function_derivative);
+
+        Self::new(function_standard, function_derivative, derivative_method)
     }
 
     pub fn new_borrowed(function_standard: &'a D1, function_derivative: &'a D2, derivative_method: E) -> Self {
-        assert_eq!(function_derivative.type_string(), function_standard.type_string(), "differentiable block must have functions of the same type");
-        Self { function_standard: Cow::Borrowed(function_standard), function_derivative: Cow::Borrowed(function_derivative), derivative_method, phantom_data: Default::default() }
+        let function_standard = Cow::Borrowed(function_standard);
+        let function_derivative = Cow::Borrowed(function_derivative);
+
+        Self::new(function_standard, function_derivative, derivative_method)
     }
 
     #[inline]
@@ -138,6 +147,33 @@ impl<'a, E: DerivativeMethodTrait2, D1: DifferentiableFunctionTrait2<'a, f64>, D
         (update_fn)(self.function_standard.as_ref(), self.function_derivative.as_ref())
     }
 }
+*/
+
+pub struct DifferentiableBlock2<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> {
+    function_standard: Cow<'a, DC::FunctionType<'a, f64>>,
+    function_derivative: Cow<'a, DC::FunctionType<'a, E::T>>,
+    derivative_method: E
+}
+impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> DifferentiableBlock2<'a, DC, E> {
+    pub fn new(_differentiable_function_class: DC, derivative_method: E, function_standard: Cow<'a, DC::FunctionType<'a, f64>>, function_derivative: Cow<'a, DC::FunctionType<'a, E::T>>) -> Self {
+        Self {
+            function_standard,
+            function_derivative,
+            derivative_method,
+        }
+    }
+    #[inline]
+    pub fn call(&self, inputs: &[f64]) -> Vec<f64> {
+        self.function_standard.call(inputs)
+    }
+    #[inline]
+    pub fn derivative(&self, inputs: &[f64]) -> (Vec<f64>, DMatrix<f64>) {
+        self.derivative_method.derivative(inputs, self.function_derivative.as_ref())
+    }
+    pub fn update_function<U: Fn(&DC::FunctionType<'a, f64>, &DC::FunctionType<'a, E::T>) >(&'a self, update_fn: U) {
+        update_fn(self.function_standard.as_ref(), self.function_derivative.as_ref())
+    }
+}
 
 /*
 pub trait DifferentiableBlockArgPrepTrait2<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> {
@@ -147,7 +183,6 @@ impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> Differentia
     fn prep_args(&self, _inputs: &[f64], _function_standard_args: &DC::FunctionType<'a, f64>, _function_derivative_args: &DC::FunctionType<'a, E::T>) { }
 }
 */
-
 /*
 pub trait DifferentiableBlockUpdateArgs<'a, D: DifferentiableFunctionTrait> {
     fn update_args<T: AD>(&self, args: &mut D::ArgsType<'_, T>);

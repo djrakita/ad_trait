@@ -7,7 +7,7 @@ use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-use crate::{AD, ADNumMode, F64};
+use crate::{AD, ADNumMode, ADNumType, F64};
 use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
 use serde::de::{MapAccess, Visitor};
 use serde::ser::{SerializeStruct};
@@ -129,6 +129,10 @@ impl<const N: usize> AD for f64xn<N> {
 
     fn ad_num_mode() -> ADNumMode {
         ADNumMode::SIMDNum
+    }
+
+    fn ad_num_type() -> ADNumType {
+        ADNumType::F64XN
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {

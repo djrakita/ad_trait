@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use nalgebra::{DMatrix};
-use crate::{AD};
+use crate::{AD, ADNumType};
 use crate::forward_ad::adfn::adfn;
 use crate::forward_ad::ForwardADTrait;
 use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
@@ -48,11 +48,43 @@ impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for () {
     }
 }
 
+pub trait DifferentiableFunctionTrait3<'a, T: AD> {
+    fn type_string(&self) -> String;
+    fn call(&self, inputs: &[T]) -> Vec<T>;
+    fn num_inputs(&self) -> usize;
+    fn num_outputs(&self) -> usize;
+}
+impl<'a, T: AD> DifferentiableFunctionTrait3<'a, T> for () {
+    fn type_string(&self) -> String {
+        "".to_string()
+    }
+
+    fn call(&self, _inputs: &[T]) -> Vec<T> {
+        vec![]
+    }
+
+    fn num_inputs(&self) -> usize {
+        0
+    }
+
+    fn num_outputs(&self) -> usize {
+        0
+    }
+}
+
 pub trait DerivativeMethodTrait {
     type T: AD;
     type DerivativeMethodData;
 
     fn derivative<'a, D: DifferentiableFunctionTrait + ?Sized>(inputs: &[f64], args: &D::ArgsType<'_, Self::T>, derivative_method_data: &Self::DerivativeMethodData) -> (Vec<f64>, DMatrix<f64>);
+
+    #[inline(always)]
+    fn t_is_f64() -> bool {
+        match Self::T::ad_num_type() {
+            ADNumType::F64 => { true }
+            _ => { false }
+        }
+    }
 }
 
 pub trait DerivativeMethodTrait2 {
@@ -68,20 +100,18 @@ impl DerivativeMethodTrait2 for () {
     }
 }
 
-/*
 pub trait DerivativeMethodTrait3<'a> {
     type T: AD;
 
-    fn derivative(&self, inputs: &[f64], function: &Box<dyn DifferentiableFunctionTrait2<'a, Self::T> + 'a>) -> (Vec<f64>, DMatrix<f64>);
+    fn derivative(&self, inputs: &[f64], function: &Box<dyn DifferentiableFunctionTrait3<'a, Self::T> + 'a>) -> (Vec<f64>, DMatrix<f64>);
 }
 impl<'a> DerivativeMethodTrait3<'a> for () {
     type T = f64;
 
-    fn derivative(&self, _inputs: &[f64], _function: &Box<dyn DifferentiableFunctionTrait2<'a, Self::T> + 'a>) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative(&self, _inputs: &[f64], _function: &Box<dyn DifferentiableFunctionTrait3<'a, Self::T> + 'a>) -> (Vec<f64>, DMatrix<f64>) {
         panic!("derivative should not actually be called on ()");
     }
 }
-*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

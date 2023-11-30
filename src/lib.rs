@@ -63,6 +63,7 @@ pub trait AD :
     fn constant(constant: f64) -> Self;
     fn to_constant(&self) -> f64;
     fn ad_num_mode() -> ADNumMode;
+    fn ad_num_type() -> ADNumType;
     fn add_scalar(arg1: f64, arg2: Self) -> Self;
     fn sub_l_scalar(arg1: f64, arg2: Self) -> Self;
     fn sub_r_scalar(arg1: Self, arg2: f64) -> Self;
@@ -182,6 +183,16 @@ pub enum ADNumMode {
     SIMDNum
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ADNumType {
+    F64,
+    F32,
+    ADR,
+    ADFN,
+    ADF,
+    F64XN
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub trait FloatADTrait: AD { }
@@ -197,6 +208,10 @@ impl AD for f64 {
 
     fn ad_num_mode() -> ADNumMode {
         ADNumMode::Float
+    }
+
+    fn ad_num_type() -> ADNumType {
+        ADNumType::F64
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {
@@ -260,6 +275,10 @@ impl AD for f32 {
 
     fn ad_num_mode() -> ADNumMode {
         ADNumMode::Float
+    }
+
+    fn ad_num_type() -> ADNumType {
+        ADNumType::F32
     }
 
     fn add_scalar(arg1: f64, arg2: Self) -> Self {
