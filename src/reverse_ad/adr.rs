@@ -406,7 +406,7 @@ impl NodeType {
             NodeType::Ceil => { tiny_vec!([f64; 2] => 0.0) }
             NodeType::Round => { tiny_vec!([f64; 2] => 0.0) }
             NodeType::Trunc => { tiny_vec!([f64; 2] => 0.0) }
-            NodeType::Fract => { tiny_vec!([f64; 2] => 0.0) }
+            NodeType::Fract => { tiny_vec!([f64; 2] => 1.0) }
             NodeType::Sin => { tiny_vec!([f64; 2] => ComplexField::cos(parent_0.unwrap())) }
             NodeType::Cos => { tiny_vec!([f64; 2] => ComplexField::sin(-parent_0.unwrap())) }
             NodeType::Tan => {

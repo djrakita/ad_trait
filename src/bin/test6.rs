@@ -1,7 +1,7 @@
-use std::borrow::Cow;
+use std::cell::RefCell;
+use std::rc::Rc;
 use ad_trait::AD;
-use ad_trait::differentiable_block::DifferentiableBlock2;
-use ad_trait::differentiable_function::{DifferentiableFunctionClass, DifferentiableFunctionTrait2, FiniteDifferencing2};
+use ad_trait::differentiable_function::{DifferentiableFunctionClass, DifferentiableFunctionTrait2};
 
 pub struct TestClass;
 impl TestClass {
@@ -21,10 +21,6 @@ impl Test {
     }
 }
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test {
-    fn type_string(&self) -> String {
-        "Test".to_string()
-    }
-
     fn call(&self, inputs: &[T]) -> Vec<T> {
         vec![inputs[0].sin()]
     }
@@ -58,10 +54,6 @@ impl<'a, T: AD> Test2<'a, T> {
     }
 }
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test2<'a, T> {
-    fn type_string(&self) -> String {
-        "Test2".to_string()
-    }
-
     fn call(&self, inputs: &[T]) -> Vec<T> {
         vec![ inputs[0].sin() * *self.a ]
     }
@@ -75,8 +67,14 @@ impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test2<'a, T> {
     }
 }
 
+
 fn main() {
-    let dd = DifferentiableBlock2::new(TestClass, FiniteDifferencing2::new(), Cow::Owned(Test), Cow::Owned(Test));
-    let res = dd.derivative(&[1.0]);
-    println!("{:?}", res);
+    let a: Rc<RefCell<Option<i32>>> = Rc::new(RefCell::new(None));
+
+    let b = a.clone();
+    let c = b.clone();
+
+    *b.borrow_mut() = Some(2);
+
+    println!("{:?}", c);
 }

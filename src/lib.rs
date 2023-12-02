@@ -1,5 +1,6 @@
 // #![feature(generic_associated_types)]
 // #![feature(const_trait_impl)]
+#![feature(min_specialization)]
 
 extern crate core;
 

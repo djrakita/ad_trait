@@ -1156,7 +1156,7 @@ impl<const N: usize> ComplexField for adfn<N> {
     }
 
     #[inline]
-    fn fract(self) -> Self { Self::new(self.value.fract(), [0.0; N]) }
+    fn fract(self) -> Self { Self::new(self.value.fract(), [1.0; N]) }
 
     #[inline]
     fn mul_add(self, a: Self, b: Self) -> Self { return (self * a) + b; }
@@ -1168,7 +1168,8 @@ impl<const N: usize> ComplexField for adfn<N> {
 
     #[inline]
     fn hypot(self, other: Self) -> Self::RealField {
-        return ComplexField::sqrt(ComplexField::powi(self, 2) + ComplexField::powi(other, 2));
+        // return ComplexField::sqrt(ComplexField::powi(self, 2) + ComplexField::powi(other, 2));
+        return ComplexField::sqrt(self*self + other*other);
     }
 
     #[inline]
@@ -1391,7 +1392,11 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn powf(self, n: Self::RealField) -> Self {
         let output_value = self.value.powf(n.value);
         let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0);
-        let d_powf_d_arg2 = self.value.powf(n.value) * self.value.ln();
+        let d_powf_d_arg2 = if self.value < 0.0 {
+            0.0
+        } else {
+            self.value.powf(n.value) * self.value.ln()
+        };
         let output_tangent = two_vecs_mul_and_add(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);
 
         Self {
