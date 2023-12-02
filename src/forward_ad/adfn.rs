@@ -246,6 +246,19 @@ fn two_vecs_mul_and_add<const N: usize>(vec1: &[f64; N], vec2: &[f64; N], scalar
     out
 }
 #[inline(always)]
+fn two_vecs_mul_and_add_with_nan_check<const N: usize>(vec1: &[f64; N], vec2: &[f64; N], scalar1: f64, scalar2: f64) -> [f64; N] {
+    let mut out = [0.0; N];
+    for i in 0..N {
+        out[i] = mul_with_nan_check(scalar1, vec1[i]) + mul_with_nan_check(scalar2, vec2[i]);
+    }
+    out
+}
+#[inline(always)]
+fn mul_with_nan_check(a: f64, b: f64) -> f64 {
+    return if a.is_nan() && b.is_zero() { 0.0 } else if a.is_zero() && b.is_nan() { 0.0 } else { a * b }
+}
+
+#[inline(always)]
 fn two_vecs_add<const N: usize>(vec1: &[f64; N], vec2: &[f64; N]) -> [f64; N] {
     let mut out = [0.0; N];
     for i in 0..N {
@@ -1246,7 +1259,7 @@ impl<const N: usize> ComplexField for adfn<N> {
 
     #[inline]
     fn atan(self) -> Self {
-        let output_value = self.value.acos();
+        let output_value = self.value.atan();
         let d_atan_d_arg1 =  1.0 / (self.value * self.value + 1.0);
         let output_tangent = one_vec_mul(&self.tangent, d_atan_d_arg1);
 
@@ -1392,6 +1405,15 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn powf(self, n: Self::RealField) -> Self {
         let output_value = self.value.powf(n.value);
         let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0);
+        let d_powf_d_arg2 = self.value.powf(n.value) * self.value.ln();
+        let output_tangent = two_vecs_mul_and_add_with_nan_check(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);
+        return Self {
+            value: output_value,
+            tangent: output_tangent
+        }
+        /*
+        let output_value = self.value.powf(n.value);
+        let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0);
         let d_powf_d_arg2 = if self.value < 0.0 {
             0.0
         } else {
@@ -1403,6 +1425,7 @@ impl<const N: usize> ComplexField for adfn<N> {
             value: output_value,
             tangent: output_tangent
         }
+        */
     }
 
     #[inline]

@@ -62,6 +62,20 @@ macro_rules! make_adf {
                 }
                 out
              }
+            #[inline(always)]
+            fn mul_with_nan_check(a: $v, b: $v) -> $v {
+                return if a.is_nan() && b.is_zero() { 0.0 } else if a.is_zero() && b.is_nan() { 0.0 } else { a * b }
+            }
+            #[inline(always)]
+            fn two_vecs_mul_and_add_with_nan_check(vec1: &$t, vec2: &$t, scalar1: $v, scalar2: $v) -> $t {
+                let mut out_vec = vec![];
+
+                for i in 0..$a {
+                    out_vec.push( Self::mul_with_nan_check(vec1.extract(i), scalar1) + Self::mul_with_nan_check(vec2.extract(i), scalar2) );
+                }
+
+                $t::from_slice_unaligned(&out_vec)
+            }
         }
 
         impl Serialize for $s {
@@ -1233,7 +1247,7 @@ macro_rules! make_adf {
 
             #[inline]
             fn atan(self) -> Self {
-                let output_value = self.value.acos();
+                let output_value = self.value.atan();
                 let d_atan_d_arg1 =  (1.0 / (self.value * self.value + 1.0)) as $v;
                 let output_tangent = $t::splat(d_atan_d_arg1)*self.tangent;
 
@@ -1379,13 +1393,10 @@ macro_rules! make_adf {
             fn powf(self, n: Self::RealField) -> Self {
                 let output_value = self.value.powf(n.value);
                 let d_powf_d_arg1 = (n.value * self.value.powf(n.value - 1.0)) as $v;
-                let d_powf_d_arg2 = if self.value < 0.0 {
-                    0.0 as $v
-                } else {
-                    (self.value.powf(n.value) * self.value.ln()) as $v
-                };
+                let d_powf_d_arg2 = (self.value.powf(n.value) * self.value.ln()) as $v;
                 // let d_powf_d_arg2 = (self.value.powf(n.value) * self.value.ln()) as $v;
-                let output_tangent = $t::splat(d_powf_d_arg1)*self.tangent + $t::splat(d_powf_d_arg2)*n.tangent;
+                // let output_tangent = $t::splat(d_powf_d_arg1)*self.tangent + $t::splat(d_powf_d_arg2)*n.tangent;
+                let output_tangent = $s::two_vecs_mul_and_add_with_nan_check(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);
 
                 Self {
                     value: output_value,

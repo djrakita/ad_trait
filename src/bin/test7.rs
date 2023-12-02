@@ -11,12 +11,12 @@ impl DifferentiableFunctionClass for TestClass {
 pub struct Test;
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test {
     fn call(&self, inputs: &[T]) -> Vec<T> {
-        vec![inputs[0].powf(T::constant(2.0))]
+        vec![inputs[0].powf(inputs[1])]
         // vec![inputs[0].ln()]
     }
 
     fn num_inputs(&self) -> usize {
-        1
+        2
     }
 
     fn num_outputs(&self) -> usize {
@@ -30,7 +30,7 @@ fn main() {
     let db3 = DifferentiableBlock2::new_with_tag(TestClass, ReverseAD2::new(), Test, Test);
     let db4 = DifferentiableBlock2::new_with_tag(TestClass, ForwardADMulti2::<adf_f32x8>::new(), Test, Test);
 
-    let input = vec![-5.5];
+    let input = vec![-1.5, 2.0];
 
     println!("{:?}", db1.derivative(&input));
     println!("{:?}", db2.derivative(&input));
