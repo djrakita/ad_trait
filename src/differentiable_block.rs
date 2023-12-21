@@ -165,14 +165,18 @@ impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> Differentia
     }
     #[inline]
     pub fn call(&self, inputs: &[f64]) -> Vec<f64> {
-        self.function_standard.call(inputs)
+        self.function_standard.call(inputs, false)
+    }
+    #[inline]
+    pub fn call_ad_values(&self, inputs: &[E::T]) -> Vec<E::T> {
+        self.function_derivative.call(inputs, false)
     }
     #[inline]
     pub fn derivative(&self, inputs: &[f64]) -> (Vec<f64>, DMatrix<f64>) {
         self.derivative_method.derivative(inputs, &self.function_derivative)
     }
-    pub fn update_function<U: Fn(&mut DC::FunctionType<'a, f64>, &mut DC::FunctionType<'a, E::T>) >(&'a mut self, update_fn: U) {
-        update_fn(&mut self.function_standard, &mut self.function_derivative)
+    pub fn update_function<U: Fn(&DC::FunctionType<'a, f64>, &DC::FunctionType<'a, E::T>) >(&self, update_fn: U) {
+        update_fn(&self.function_standard, &self.function_derivative)
     }
 }
 pub type DifferentiableBlockEmpty<'a> = DifferentiableBlock2<'a, (), ()>;

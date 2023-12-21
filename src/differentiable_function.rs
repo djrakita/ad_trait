@@ -25,12 +25,12 @@ impl DifferentiableFunctionClass for () {
 }
 
 pub trait DifferentiableFunctionTrait2<'a, T: AD> {
-    fn call(&self, inputs: &[T]) -> Vec<T>;
+    fn call(&self, inputs: &[T], freeze: bool) -> Vec<T>;
     fn num_inputs(&self) -> usize;
     fn num_outputs(&self) -> usize;
 }
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for () {
-    fn call(&self, _inputs: &[T]) -> Vec<T> {
+    fn call(&self, _inputs: &[T], _freeze: bool) -> Vec<T> {
         vec![]
     }
 
@@ -58,7 +58,7 @@ impl DifferentiableFunctionZero {
     }
 }
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for DifferentiableFunctionZero {
-    fn call(&self, _inputs: &[T]) -> Vec<T> {
+    fn call(&self, _inputs: &[T], _frozen_freeze: bool) -> Vec<T> {
         vec![T::zero(); self.num_outputs]
     }
 
@@ -93,7 +93,7 @@ impl DerivativeMethodClass for () {
     type DerivativeMethod = ();
 }
 
-pub trait DerivativeMethodTrait2 {
+pub trait DerivativeMethodTrait2: Clone {
     type T: AD;
 
     fn derivative<'a, D: DifferentiableFunctionTrait2<'a, Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>);
@@ -167,6 +167,7 @@ impl DerivativeMethodClass for DerivativeMethodClassFiniteDifferencing {
     type DerivativeMethod = FiniteDifferencing2;
 }
 
+#[derive(Clone)]
 pub struct FiniteDifferencing2 { }
 impl FiniteDifferencing2 {
     pub fn new() -> Self {
@@ -185,13 +186,13 @@ impl DerivativeMethodTrait2 for FiniteDifferencing2 {
 
         let x0 = inputs.to_vec();
         // let f0 = D::call(&x0, args);
-        let f0 = function.call(&x0);
+        let f0 = function.call(&x0, false);
 
         for col_idx in 0..num_inputs {
             let mut xh = x0.clone();
             xh[col_idx] += h;
             // let fh = D::call(&xh, args);
-            let fh = function.call(&xh);
+            let fh = function.call(&xh, true);
             for row_idx in 0..num_outputs {
                 out_derivative[(row_idx, col_idx)] = (fh[row_idx] - f0[row_idx]) / h;
             }
@@ -259,10 +260,17 @@ impl DerivativeMethodTrait for ReverseAD {
         let out_value = f.iter().map(|x| x.value()).collect();
 
         for row_idx in 0..num_outputs {
-            let grad_output = f[row_idx].get_backwards_mode_grad();
-            for col_idx in 0..num_inputs {
-                let d = grad_output.wrt(&inputs_ad[col_idx]);
-                out_derivative[(row_idx, col_idx)] = d;
+            if f[row_idx].is_constant() {
+                for col_idx in 0..num_inputs {
+                    out_derivative[(row_idx, col_idx)] = 0.0;
+                }
+            }
+            else {
+                let grad_output = f[row_idx].get_backwards_mode_grad();
+                for col_idx in 0..num_inputs {
+                    let d = grad_output.wrt(&inputs_ad[col_idx]);
+                    out_derivative[(row_idx, col_idx)] = d;
+                }
             }
         }
 
@@ -275,6 +283,7 @@ impl DerivativeMethodClass for DerivativeMethodClassReverseAD {
     type DerivativeMethod = ReverseAD2;
 }
 
+#[derive(Clone)]
 pub struct ReverseAD2 { }
 impl ReverseAD2 {
     pub fn new() -> Self {
@@ -297,15 +306,21 @@ impl DerivativeMethodTrait2 for ReverseAD2 {
         }
 
         // let f = D::call(&inputs_ad, args);
-        let f = function.call(&inputs_ad);
+        let f = function.call(&inputs_ad, false);
         assert_eq!(f.len(), num_outputs);
         let out_value = f.iter().map(|x| x.value()).collect();
 
         for row_idx in 0..num_outputs {
-            let grad_output = f[row_idx].get_backwards_mode_grad();
-            for col_idx in 0..num_inputs {
-                let d = grad_output.wrt(&inputs_ad[col_idx]);
-                out_derivative[(row_idx, col_idx)] = d;
+            if f[row_idx].is_constant() {
+                for col_idx in 0..num_inputs {
+                    out_derivative[(row_idx, col_idx)] = 0.0;
+                }
+            } else {
+                let grad_output = f[row_idx].get_backwards_mode_grad();
+                for col_idx in 0..num_inputs {
+                    let d = grad_output.wrt(&inputs_ad[col_idx]);
+                    out_derivative[(row_idx, col_idx)] = d;
+                }
             }
         }
 
@@ -353,6 +368,7 @@ impl DerivativeMethodClass for DerivativeMethodClassForwardAD {
     type DerivativeMethod = ForwardAD2;
 }
 
+#[derive(Clone)]
 pub struct ForwardAD2 { }
 impl ForwardAD2 {
     pub fn new() -> Self {
@@ -379,13 +395,18 @@ impl DerivativeMethodTrait2 for ForwardAD2 {
             }
 
             // let f = D::call(&inputs_ad, args);
-            let f = function.call(&inputs_ad);
+            let freeze = if col_idx == 0 { false } else { true };
+            let f = function.call(&inputs_ad, freeze);
             assert_eq!(f.len(), num_outputs, "{}", format!("does not match {}, {}", f.len(), num_outputs));
             for (row_idx, res) in f.iter().enumerate() {
                 if out_value.len() < num_outputs {
                     out_value.push(res.value);
                 }
-                out_derivative[(row_idx, col_idx)] = res.tangent[0];
+                if res.tangent[0].is_nan() {
+                    out_derivative[(row_idx, col_idx)] = res.tangent[0];
+                } else {
+                    out_derivative[(row_idx, col_idx)] = res.tangent[0];
+                }
             }
         }
 
@@ -450,6 +471,7 @@ impl<A: AD + ForwardADTrait> DerivativeMethodClass for DerivativeMethodClassForw
     type DerivativeMethod = ForwardADMulti2<A>;
 }
 
+#[derive(Clone)]
 pub struct ForwardADMulti2<A: AD + ForwardADTrait> {
     phantom_data: PhantomData<A>
 }
@@ -469,6 +491,7 @@ impl<A: AD + ForwardADTrait> DerivativeMethodTrait2 for ForwardADMulti2<A> {
 
         let mut curr_idx = 0;
 
+        let mut freeze = false;
         let k = Self::T::tangent_size();
         'l1: loop {
             let mut inputs_ad = vec![];
@@ -483,7 +506,8 @@ impl<A: AD + ForwardADTrait> DerivativeMethodTrait2 for ForwardADMulti2<A> {
                 inputs_ad[curr_idx+i].set_tangent_value(i, 1.0);
             }
 
-            let f = function.call(&inputs_ad);
+            let f = function.call(&inputs_ad, freeze);
+            freeze = true;
             assert_eq!(f.len(), num_outputs);
 
             for (row_idx, res) in f.iter().enumerate() {
@@ -494,12 +518,16 @@ impl<A: AD + ForwardADTrait> DerivativeMethodTrait2 for ForwardADMulti2<A> {
                 'l3: for i in 0..k {
                     if curr_idx + i >= num_inputs { break 'l3; }
                     // out_derivative[(row_idx, curr_idx+i)] = res.tangent[i];
-                    out_derivative[(row_idx, curr_idx+i)] = curr_tangent[i];
+                    if curr_tangent[i].is_nan() {
+                        out_derivative[(row_idx, curr_idx+i)] = curr_tangent[i];
+                    } else {
+                        out_derivative[(row_idx, curr_idx+i)] = curr_tangent[i];
+                    }
                 }
             }
 
             curr_idx += k;
-            if curr_idx > num_inputs { break 'l1; }
+            if curr_idx >= num_inputs { break 'l1; }
         }
 
         return (out_value, out_derivative)
@@ -588,6 +616,7 @@ impl<const K: usize> DerivativeMethodClass for DerivativeMethodClassFiniteDiffer
     type DerivativeMethod = FiniteDifferencingMulti2<K>;
 }
 
+#[derive(Clone)]
 pub struct FiniteDifferencingMulti2<const K: usize>;
 impl<const K: usize> FiniteDifferencingMulti2<K> {
     pub fn new() -> Self {
@@ -629,7 +658,7 @@ impl<const K: usize> DerivativeMethodTrait2 for FiniteDifferencingMulti2<K> {
             }
 
             // let f = D::call(&inputs_ad, args);
-            let f = function.call(&inputs_ad);
+            let f = function.call(&inputs_ad, false);
             assert_eq!(f.len(), num_outputs);
 
             if first_loop {
@@ -675,6 +704,7 @@ impl DerivativeMethodClass for DerivativeMethodClassAlwaysZero {
     type DerivativeMethod = DerivativeAlwaysZero;
 }
 
+#[derive(Clone)]
 pub struct DerivativeAlwaysZero;
 impl DerivativeAlwaysZero {
     pub fn new() -> Self {

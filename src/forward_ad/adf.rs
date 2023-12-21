@@ -1360,7 +1360,8 @@ macro_rules! make_adf {
             #[inline]
             fn sqrt(self) -> Self {
                 let output_value = self.value.sqrt();
-                let d_sqrt_d_arg1 =  (1.0/(2.0*self.value.sqrt())) as $v;
+                let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
+                let d_sqrt_d_arg1 =  (1.0/(2.0*tmp.sqrt())) as $v;
                 let output_tangent = $t::splat(d_sqrt_d_arg1)*self.tangent;
 
                 Self {
@@ -1393,7 +1394,8 @@ macro_rules! make_adf {
             fn powf(self, n: Self::RealField) -> Self {
                 let output_value = self.value.powf(n.value);
                 let d_powf_d_arg1 = (n.value * self.value.powf(n.value - 1.0)) as $v;
-                let d_powf_d_arg2 = (self.value.powf(n.value) * self.value.ln()) as $v;
+                let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
+                let d_powf_d_arg2 = (self.value.powf(n.value) * tmp.ln()) as $v;
                 // let d_powf_d_arg2 = (self.value.powf(n.value) * self.value.ln()) as $v;
                 // let output_tangent = $t::splat(d_powf_d_arg1)*self.tangent + $t::splat(d_powf_d_arg2)*n.tangent;
                 let output_tangent = $s::two_vecs_mul_and_add_with_nan_check(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);

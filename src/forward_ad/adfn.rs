@@ -1372,7 +1372,8 @@ impl<const N: usize> ComplexField for adfn<N> {
     #[inline]
     fn sqrt(self) -> Self {
         let output_value = self.value.sqrt();
-        let d_sqrt_d_arg1 =  1.0/(2.0*self.value.sqrt());
+        let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
+        let d_sqrt_d_arg1 =  1.0/(2.0*tmp.sqrt());
         let output_tangent = one_vec_mul(&self.tangent, d_sqrt_d_arg1);
 
         Self {
@@ -1405,7 +1406,8 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn powf(self, n: Self::RealField) -> Self {
         let output_value = self.value.powf(n.value);
         let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0);
-        let d_powf_d_arg2 = self.value.powf(n.value) * self.value.ln();
+        let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
+        let d_powf_d_arg2 = self.value.powf(n.value) * tmp.ln();
         let output_tangent = two_vecs_mul_and_add_with_nan_check(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);
         return Self {
             value: output_value,

@@ -63,6 +63,10 @@ pub trait AD :
 {
     fn constant(constant: f64) -> Self;
     fn to_constant(&self) -> f64;
+    #[inline(always)]
+    fn to_constant_ad(&self) -> Self {
+        Self::constant(self.to_constant())
+    }
     fn ad_num_mode() -> ADNumMode;
     fn ad_num_type() -> ADNumType;
     fn add_scalar(arg1: f64, arg2: Self) -> Self;
@@ -541,4 +545,15 @@ impl<'de, T: AD> DeserializeAs<'de, T> for SerdeAD<T> {
     fn deserialize_as<D>(deserializer: D) -> Result<T, D::Error> where D: Deserializer<'de> {
         ad_custom_deserialize(deserializer)
     }
+}
+
+pub trait ADConvertableTrait {
+    type ConvertableType<T: AD>;
+
+    fn convert_to_other_ad_type<T1: AD, T2: AD>(input: &Self::ConvertableType<T1>) -> Self::ConvertableType<T2>;
+}
+impl ADConvertableTrait for () {
+    type ConvertableType<T: AD> = ();
+
+    fn convert_to_other_ad_type<T1: AD, T2: AD>(_input: &Self::ConvertableType<T1>) -> Self::ConvertableType<T2> { () }
 }

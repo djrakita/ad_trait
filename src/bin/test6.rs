@@ -21,7 +21,7 @@ impl Test {
     }
 }
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test {
-    fn call(&self, inputs: &[T]) -> Vec<T> {
+    fn call(&self, inputs: &[T], frozen: bool) -> Vec<T> {
         vec![inputs[0].sin()]
     }
 
@@ -54,7 +54,7 @@ impl<'a, T: AD> Test2<'a, T> {
     }
 }
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test2<'a, T> {
-    fn call(&self, inputs: &[T]) -> Vec<T> {
+    fn call(&self, inputs: &[T], frozen: bool) -> Vec<T> {
         vec![ inputs[0].sin() * *self.a ]
     }
 

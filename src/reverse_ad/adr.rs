@@ -53,12 +53,22 @@ impl adr {
     pub fn value(&self) -> f64 {
         self.value
     }
+    #[inline]
+    pub fn is_constant(&self) -> bool {
+        match self.node_idx {
+            NodeIdx::Constant => { true }
+            _ => { false }
+        }
+    }
     pub fn get_backwards_mode_grad(&self) -> BackwardsModeGradOutput {
         let nodes = self.computation_graph.nodes.read().unwrap();
         let l = nodes.len();
         let mut adjoints = vec![0.0; l];
         match self.node_idx {
-            NodeIdx::Constant => { panic!("cannot get backwards mode grad on a constant.") }
+            NodeIdx::Constant => {
+                //panic!("cannot get backwards mode grad on a constant.")
+                return BackwardsModeGradOutput { adjoints }
+            }
             NodeIdx::Idx(node_idx) => { adjoints[node_idx] = 1.0; }
         }
 
@@ -449,7 +459,8 @@ impl NodeType {
             }
             NodeType::Sqrt => {
                 let lhs = parent_0.unwrap();
-                tiny_vec!([f64; 2] => 1.0/(2.0*ComplexField::sqrt(lhs)))
+                let tmp = if lhs == 0.0 { 0.0001 } else { lhs };
+                tiny_vec!([f64; 2] => 1.0/(2.0*ComplexField::sqrt(tmp)))
             }
             NodeType::Exp => {
                 tiny_vec!([f64; 2] => ComplexField::exp(parent_0.unwrap()))
@@ -457,7 +468,8 @@ impl NodeType {
             NodeType::Powf => {
                 let lhs = parent_0.unwrap();
                 let rhs = parent_1.unwrap();
-                tiny_vec!([f64; 2] => rhs * ComplexField::powf(lhs, rhs - 1.0), ComplexField::powf(lhs, rhs) * ComplexField::ln(lhs))
+                let tmp = if lhs == 0.0 { 0.0001 } else { lhs };
+                tiny_vec!([f64; 2] => rhs * ComplexField::powf(lhs, rhs - 1.0), ComplexField::powf(lhs, rhs) * ComplexField::ln(tmp))
             }
         };
     }
