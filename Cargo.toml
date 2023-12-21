@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = { version="0.32.*", features=["rand", "alloc", "std"] }
+nalgebra = { version="0.32.*", features=["rand", "alloc", "std", "libm"] }
 num-traits = "*"
 simba = { git = "https://github.com/dimforge/simba", features = ["packed_simd"] }
 # simba= { version = "0.8.1", features = ["packed_simd"] }
@@ -21,9 +21,9 @@ faer-core = "*"
 faer-svd  = "*"
 dyn-stack = "*"
 vek = {version = "*", features = ['vec8', 'vec16', 'vec32', 'vec64'] }
-serde = { version="1.0.171", features=["derive"] }
+serde = { version="1.0", features=["derive"] }
 serde_json = { version="1.0.100" }
-nalgebra-sparse = "0.9.0"
+# nalgebra-sparse = "0.9.0"
 ndarray = "0.15.6"
 bevy_reflect = { version="0.11.1" }
 serde_with = { version="3.2.0" }
