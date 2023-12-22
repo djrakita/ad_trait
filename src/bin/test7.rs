@@ -10,7 +10,7 @@ impl DifferentiableFunctionClass for TestClass {
 
 pub struct Test;
 impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test {
-    fn call(&self, inputs: &[T], frozen: bool) -> Vec<T> {
+    fn call(&self, inputs: &[T], _frozen: bool) -> Vec<T> {
         vec![inputs[0].powf(inputs[1])]
         // vec![inputs[0].ln()]
     }
