@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use ad_trait::AD;
-use ad_trait::differentiable_function::{DifferentiableFunctionClass, DifferentiableFunctionTrait2};
+use ad_trait::differentiable_function::{DifferentiableFunctionClass, DifferentiableFunctionTrait};
 
 pub struct TestClass;
 impl TestClass {
@@ -20,7 +20,7 @@ impl Test {
         Self {}
     }
 }
-impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test {
+impl<'a, T: AD> DifferentiableFunctionTrait<'a, T> for Test {
     fn call(&self, inputs: &[T], frozen: bool) -> Vec<T> {
         vec![inputs[0].sin()]
     }
@@ -53,7 +53,7 @@ impl<'a, T: AD> Test2<'a, T> {
         Self { a }
     }
 }
-impl<'a, T: AD> DifferentiableFunctionTrait2<'a, T> for Test2<'a, T> {
+impl<'a, T: AD> DifferentiableFunctionTrait<'a, T> for Test2<'a, T> {
     fn call(&self, inputs: &[T], frozen: bool) -> Vec<T> {
         vec![ inputs[0].sin() * *self.a ]
     }

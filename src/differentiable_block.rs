@@ -1,6 +1,7 @@
 use nalgebra::DMatrix;
-use crate::differentiable_function::{DerivativeMethodTrait, DerivativeMethodTrait2, DifferentiableFunctionClass, DifferentiableFunctionClassZero, DifferentiableFunctionTrait, DifferentiableFunctionTrait2, DifferentiableFunctionZero};
+use crate::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionClass, DifferentiableFunctionClassZero, DifferentiableFunctionTrait, DifferentiableFunctionZero};
 
+/*
 pub struct DifferentiableBlock<'a, D: DifferentiableFunctionTrait, E: DerivativeMethodTrait, AP: DifferentiableBlockArgPrepTrait<'a, D, E>> {
     function_standard_args: D::ArgsType<'a, f64>,
     function_derivative_args: D::ArgsType<'a, E::T>,
@@ -58,7 +59,9 @@ impl<'a, D: DifferentiableFunctionTrait, E: DerivativeMethodTrait, AP: Different
         &self.derivative_method_data
     }
 }
+*/
 
+/*
 /// Has to be separate so that both the standard args and derivative args can be updated at the same time
 pub trait DifferentiableBlockArgPrepTrait<'a, D: DifferentiableFunctionTrait, E: DerivativeMethodTrait> {
     fn prep_args(&self, inputs: &[f64], function_standard_args: &D::ArgsType<'a, f64>, function_derivative_args: &D::ArgsType<'a, E::T>);
@@ -66,6 +69,7 @@ pub trait DifferentiableBlockArgPrepTrait<'a, D: DifferentiableFunctionTrait, E:
 impl<'a, D: DifferentiableFunctionTrait, E: DerivativeMethodTrait> DifferentiableBlockArgPrepTrait<'a, D, E> for () {
     fn prep_args(&self, _inputs: &[f64], _function_standard_args: &D::ArgsType<'a, f64>, _function_derivative_args: &D::ArgsType<'a, E::T>) { }
 }
+*/
 
 /*
 pub struct DifferentiableBlock2<'a, E: DerivativeMethodTrait2> {
@@ -135,12 +139,12 @@ impl<'a, E: DerivativeMethodTrait2, D1: DifferentiableFunctionTrait2<'a, f64>, D
 */
 
 #[derive(Clone)]
-pub struct DifferentiableBlock2<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> {
+pub struct DifferentiableBlock<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> {
     function_standard: DC::FunctionType<'a, f64>,
     function_derivative: DC::FunctionType<'a, E::T>,
     derivative_method: E
 }
-impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> DifferentiableBlock2<'a, DC, E> {
+impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> DifferentiableBlock<'a, DC, E> {
     pub fn new(derivative_method: E, function_standard: DC::FunctionType<'a, f64>, function_derivative: DC::FunctionType<'a, E::T>) -> Self {
         Self {
             function_standard,
@@ -178,16 +182,24 @@ impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> Differentia
     pub fn update_function<U: Fn(&DC::FunctionType<'a, f64>, &DC::FunctionType<'a, E::T>) >(&self, update_fn: U) {
         update_fn(&self.function_standard, &self.function_derivative)
     }
+    #[inline]
+    pub fn function_standard(&self) -> &DC::FunctionType<'a, f64> {
+        &self.function_standard
+    }
+    #[inline]
+    pub fn function_derivative(&self) -> &DC::FunctionType<'a, E::T> {
+        &self.function_derivative
+    }
 }
-pub type DifferentiableBlockEmpty<'a> = DifferentiableBlock2<'a, (), ()>;
+pub type DifferentiableBlockEmpty<'a> = DifferentiableBlock<'a, (), ()>;
 impl<'a> DifferentiableBlockEmpty<'a> {
     pub fn new_empty() -> Self  {
         Self::new((), (), ())
     }
 }
 
-pub type DifferentiableBlockZero<'a, E> = DifferentiableBlock2<'a, DifferentiableFunctionClassZero, E>;
-impl<'a, E: DerivativeMethodTrait2> DifferentiableBlockZero<'a, E> {
+pub type DifferentiableBlockZero<'a, E> = DifferentiableBlock<'a, DifferentiableFunctionClassZero, E>;
+impl<'a, E: DerivativeMethodTrait> DifferentiableBlockZero<'a, E> {
     pub fn new_zero(derivative_method: E, num_inputs: usize, num_outputs: usize) -> Self {
         Self::new(derivative_method, DifferentiableFunctionZero::new(num_inputs, num_outputs), DifferentiableFunctionZero::new(num_inputs, num_outputs))
     }
