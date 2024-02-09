@@ -206,6 +206,48 @@ impl<'a, E: DerivativeMethodTrait> DifferentiableBlockZero<'a, E> {
 }
 
 /*
+#[allow(dead_code)]
+pub struct DifferentiableBlock2<'a, E: DerivativeMethodTrait> {
+    functions_standard: Vec<Box<dyn DifferentiableFunctionTrait2<'a, f64>>>,
+    functions_derivative: Vec<Box<dyn DifferentiableFunctionTrait2<'a, E::T>>>,
+    weights_standard: Vec<f64>,
+    weights_derivative: Vec<E::T>,
+    derivative_method: E
+}
+#[allow(unused_variables)]
+impl<'a, E: DerivativeMethodTrait> DifferentiableBlock2<'a, E> {
+    pub fn new_empty(derivative_method: E) -> Self {
+        Self {
+            functions_standard: vec![],
+            functions_derivative: vec![],
+            weights_standard: vec![],
+            weights_derivative: vec![],
+            derivative_method,
+        }
+    }
+    pub fn insert_function<F1: DifferentiableFunctionTrait2<'a, f64> + 'a, F2: DifferentiableFunctionTrait2<'a, E::T> + 'a>(mut self, function_standard: F1, function_derivative: F2, weight: f64) -> Self {
+        assert_eq!(function_standard.name(), function_derivative.name());
+
+        self.functions_standard.push(Box::new(function_standard));
+        self.functions_derivative.push(Box::new(function_derivative));
+        self.weights_standard.push(weight);
+        self.weights_derivative.push(weight.to_other_ad_type::<E::T>());
+
+        self
+    }
+    pub fn update_weight(&mut self, function_idx: usize, weight: f64) {
+        self.weights_standard[function_idx] = weight;
+        self.weights_derivative[function_idx] = weight.to_other_ad_type::<E::T>();
+    }
+    pub fn update_function<F1: DifferentiableFunctionTrait2<'a, f64>, F2: DifferentiableFunctionTrait2<'a, E::T>>(&self, function_idx: usize) {
+        // self.functions_standard[function_idx].downcast_ref::<F1>();
+
+        todo!()
+    }
+}
+*/
+
+/*
 pub trait DifferentiableBlockArgPrepTrait2<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> {
     fn prep_args(&self, inputs: &[f64], function_standard_args: &DC::FunctionType<'a, f64>, function_derivative_args: &DC::FunctionType<'a, E::T>);
 }

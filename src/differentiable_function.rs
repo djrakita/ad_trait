@@ -74,6 +74,21 @@ impl<'a, T: AD> DifferentiableFunctionTrait<'a, T> for DifferentiableFunctionZer
 }
 
 /*
+pub trait DifferentiableFunctionClass2 {
+    type FunctionType<'a, T: AD> : DifferentiableFunctionTrait2<'a, T>;
+}
+pub trait DifferentiableFunctionTrait2<'a, T: AD> : AsAny {
+    fn name(&self) -> &str;
+    fn call_raw(&self, inputs: &[T], freeze: bool) -> Vec<T>;
+    fn call(&self, output_from_call_raw: Vec<T>) -> Vec<T> {
+        output_from_call_raw
+    }
+    fn num_inputs(&self) -> usize;
+    fn num_outputs(&self) -> usize;
+}
+*/
+
+/*
 pub trait DerivativeMethodTrait {
     type T: AD;
     type DerivativeMethodData;
