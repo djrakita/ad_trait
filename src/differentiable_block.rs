@@ -139,20 +139,20 @@ impl<'a, E: DerivativeMethodTrait2, D1: DifferentiableFunctionTrait2<'a, f64>, D
 */
 
 #[derive(Clone)]
-pub struct DifferentiableBlock<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> {
-    function_standard: DC::FunctionType<'a, f64>,
-    function_derivative: DC::FunctionType<'a, E::T>,
+pub struct DifferentiableBlock<DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> {
+    function_standard: DC::FunctionType<f64>,
+    function_derivative: DC::FunctionType<E::T>,
     derivative_method: E
 }
-impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> DifferentiableBlock<'a, DC, E> {
-    pub fn new(derivative_method: E, function_standard: DC::FunctionType<'a, f64>, function_derivative: DC::FunctionType<'a, E::T>) -> Self {
+impl<DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> DifferentiableBlock<DC, E> {
+    pub fn new(derivative_method: E, function_standard: DC::FunctionType<f64>, function_derivative: DC::FunctionType<E::T>) -> Self {
         Self {
             function_standard,
             function_derivative,
             derivative_method,
         }
     }
-    pub fn new_with_tag(_differentiable_function_class: DC, derivative_method: E, function_standard: DC::FunctionType<'a, f64>, function_derivative: DC::FunctionType<'a, E::T>) -> Self {
+    pub fn new_with_tag(_differentiable_function_class: DC, derivative_method: E, function_standard: DC::FunctionType<f64>, function_derivative: DC::FunctionType<E::T>) -> Self {
         Self {
             function_standard,
             function_derivative,
@@ -179,27 +179,27 @@ impl<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> Differentiab
     pub fn derivative(&self, inputs: &[f64]) -> (Vec<f64>, DMatrix<f64>) {
         self.derivative_method.derivative(inputs, &self.function_derivative)
     }
-    pub fn update_function<U: Fn(&DC::FunctionType<'a, f64>, &DC::FunctionType<'a, E::T>) >(&self, update_fn: U) {
+    pub fn update_function<U: Fn(&DC::FunctionType<f64>, &DC::FunctionType<E::T>) >(&self, update_fn: U) {
         update_fn(&self.function_standard, &self.function_derivative)
     }
     #[inline]
-    pub fn function_standard(&self) -> &DC::FunctionType<'a, f64> {
+    pub fn function_standard(&self) -> &DC::FunctionType<f64> {
         &self.function_standard
     }
     #[inline]
-    pub fn function_derivative(&self) -> &DC::FunctionType<'a, E::T> {
+    pub fn function_derivative(&self) -> &DC::FunctionType<E::T> {
         &self.function_derivative
     }
 }
-pub type DifferentiableBlockEmpty<'a> = DifferentiableBlock<'a, (), ()>;
-impl<'a> DifferentiableBlockEmpty<'a> {
+pub type DifferentiableBlockEmpty = DifferentiableBlock<(), ()>;
+impl DifferentiableBlockEmpty {
     pub fn new_empty() -> Self  {
         Self::new((), (), ())
     }
 }
 
-pub type DifferentiableBlockZero<'a, E> = DifferentiableBlock<'a, DifferentiableFunctionClassZero, E>;
-impl<'a, E: DerivativeMethodTrait> DifferentiableBlockZero<'a, E> {
+pub type DifferentiableBlockZero<E> = DifferentiableBlock<DifferentiableFunctionClassZero, E>;
+impl<E: DerivativeMethodTrait> DifferentiableBlockZero<E> {
     pub fn new_zero(derivative_method: E, num_inputs: usize, num_outputs: usize) -> Self {
         Self::new(derivative_method, DifferentiableFunctionZero::new(num_inputs, num_outputs), DifferentiableFunctionZero::new(num_inputs, num_outputs))
     }
