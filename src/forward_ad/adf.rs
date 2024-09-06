@@ -6,7 +6,9 @@ use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use nalgebra::{Dim, Matrix, RawStorageMut, OPoint, DimName, DefaultAllocator};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
-use simba::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
+// use simba::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
+use std::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8};
+use simba::simd::{PrimitiveSimdValue, SimdValue};
 // use packed_simd_2::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
 use crate::{AD, F64, ADNumMode};
 use crate::forward_ad::ForwardADTrait;
@@ -772,10 +774,12 @@ macro_rules! make_adf {
         ////////////////////////////////////////////////////////////////////////////////////////////////////
 
         impl SimdValue for $s {
+            const LANES: usize = 4;
+
             type Element = Self;
             type SimdBool = bool;
 
-            fn lanes() -> usize { 4 }
+            // fn lanes() -> usize { 4 }
 
             fn splat(val: Self::Element) -> Self {
                 val

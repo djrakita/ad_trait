@@ -764,10 +764,11 @@ impl<const N: usize> RelativeEq for f64xn<N> {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl<const N: usize> SimdValue for f64xn<N> {
+    const LANES: usize = 4;
     type Element = Self;
     type SimdBool = bool;
 
-    fn lanes() -> usize { 4 }
+    // fn lanes() -> usize { 4 }
 
     fn splat(val: Self::Element) -> Self {
         val

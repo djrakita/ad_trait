@@ -986,10 +986,11 @@ impl  RelativeEq for adr {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl SimdValue for adr {
+    const LANES: usize = 4;
     type Element = Self;
     type SimdBool = bool;
 
-    fn lanes() -> usize { 4 }
+    // fn lanes() -> usize { 4 }
 
     fn splat(val: Self::Element) -> Self {
         val

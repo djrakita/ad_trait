@@ -1,7 +1,7 @@
 pub mod adfn;
-pub mod adfg;
-pub mod adf2;
-pub mod adf;
+// pub mod adfg;
+// pub mod adf2;
+// pub mod adf;
 
 pub trait ForwardADTrait {
     fn value(&self) -> f64;

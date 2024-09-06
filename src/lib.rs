@@ -1,7 +1,7 @@
 // #![feature(generic_associated_types)]
 // #![feature(const_trait_impl)]
 #![feature(min_specialization)]
-
+#![feature(portable_simd)]
 extern crate core;
 
 pub mod differentiable_function;
