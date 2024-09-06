@@ -190,6 +190,10 @@ impl<DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> DifferentiableBl
     pub fn function_derivative(&self) -> &DC::FunctionType<E::T> {
         &self.function_derivative
     }
+    #[inline]
+    pub fn derivative_method(&self) -> &E {
+        &self.derivative_method
+    }
 }
 pub type DifferentiableBlockEmpty = DifferentiableBlock<(), ()>;
 impl DifferentiableBlockEmpty {

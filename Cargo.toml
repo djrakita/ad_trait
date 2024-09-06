@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 nalgebra = { version="0.32.*", features=["rand", "alloc", "std", "libm"] }
+# nalgebra = { version = "0.33.0",  features=["rand", "alloc", "std", "libm"] }
 num-traits = "*"
 # simba = { git = "https://github.com/dimforge/simba", features = ["packed_simd"] }
 # simba= { version = "0.8", features = ["packed_simd"] }
@@ -29,6 +30,7 @@ ndarray = "0.15.6"
 bevy_reflect = { version="0.11.1" }
 serde_with = { version="3.2.0" }
 as-any = "0.3.1"
+# apollo-rust-linalg = { git = "https://github.com/Apollo-Lab-Yale/apollo-rust", package = "apollo-rust-linalg" }
 
 [profile.dev]
 opt-level = 3

@@ -1,5 +1,8 @@
 use std::marker::PhantomData;
-use nalgebra::{DMatrix};
+use std::sync::{Arc, Mutex};
+// use apollo_rust_linalg::{ApolloDMatrixTrait, ApolloDVectorTrait, M, V};
+use nalgebra::{DMatrix, DVector};
+use rand::Rng;
 use crate::{AD};
 use crate::forward_ad::adfn::adfn;
 use crate::forward_ad::ForwardADTrait;
@@ -727,6 +730,134 @@ impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
         return (out_value, out_derivative)
     }
 }
+
+
+pub struct DerivativeMethodClassWASP;
+impl DerivativeMethodClass for DerivativeMethodClassWASP {
+    type DerivativeMethod = WASP;
+}
+
+#[derive(Clone)]
+pub struct WASP {
+    n: usize,
+    m: usize,
+    lagrange_multiplier_inf_norm_cutoff: f64,
+    p_matrices: Vec<DMatrix<f64>>,
+    delta_x_mat: DMatrix<f64>,
+    delta_x_mat_t: DMatrix<f64>,
+    delta_f_hat_mat_t: Arc<Mutex<DMatrix<f64>>>,
+    #[allow(unused)]
+    r: usize,
+    i: Arc<Mutex<usize>>,
+    num_f_calls: Arc<Mutex<usize>>
+}
+impl WASP {
+    pub fn new(num_inputs: usize, num_outputs: usize, lagrange_multiplier_inf_norm_cutoff: f64) -> Self {
+        let n = num_inputs;
+        let m = num_outputs;
+
+        let r = n + 1;
+
+        let mut rng = rand::thread_rng();
+        let mut mm = DMatrix::zeros(n, r);
+
+        for i in 0..n {
+            for j in 0..r {
+                mm[(i, j)] = rng.gen_range(-1.0..=1.0);
+            }
+        }
+
+        let delta_x_mat = mm;
+        let delta_x_mat_t = delta_x_mat.transpose();
+        let delta_f_hat_mat_t = DMatrix::zeros(r, m);
+
+        let tmp = 2.0 * (&delta_x_mat * &delta_x_mat_t);
+        let mut p_matrices = vec![];
+        for i in 0..r {
+            let mut p = DMatrix::zeros(n+1, n+1);
+            p.view_mut((0,0), (n,n)).copy_from(&tmp);
+            let delta_x_i = delta_x_mat.column(i);
+            p.view_mut((n,0), (1,n)).copy_from_slice(delta_x_i.as_slice());
+            p.view_mut((0,n), (n,1)).copy_from_slice((-delta_x_i).as_slice());
+            p_matrices.push(p.try_inverse().expect("error"));
+        }
+
+        Self {
+            n,
+            m,
+            lagrange_multiplier_inf_norm_cutoff,
+            p_matrices,
+            delta_x_mat,
+            delta_x_mat_t,
+            delta_f_hat_mat_t: Arc::new(Mutex::new(delta_f_hat_mat_t)),
+            r,
+            i: Arc::new(Mutex::new(0)),
+            num_f_calls: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    pub fn get_num_f_calls(&self) -> usize {
+        *self.num_f_calls.lock().expect("error")
+    }
+
+    fn derivative_internal<D: DifferentiableFunctionTrait<f64> + ?Sized>(&self, inputs: &[f64], function: &D, recursive_call: bool, f0: Option<DVector<f64>>, delta_f_hat_mat_t: &mut DMatrix<f64>, i: &mut usize, num_f_calls: &mut usize) -> (Vec<f64>, DMatrix<f64>) {
+        let n = self.n;
+        let m = self.m;
+
+        let delta_x_i = self.delta_x_mat.column(*i);
+
+        let f0 = match f0 {
+            None => { *num_f_calls += 1; DVector::from_column_slice(&function.call(inputs, false))  }
+            Some(f0) => { f0 }
+        };
+
+        let p = 0.00001;
+        let x = DVector::from_column_slice(inputs);
+        let xh = x + (p * delta_x_i);
+        let fh = DVector::from_column_slice(&function.call(&xh.as_slice(), true));
+        *num_f_calls += 1;
+
+        let delta_f_i = (fh - &f0) / p;
+        delta_f_hat_mat_t.view_mut((*i, 0), (1, m)).copy_from_slice(delta_f_i.as_slice());
+
+        let a_mat = 2.0 * &self.delta_x_mat * &*delta_f_hat_mat_t;
+
+        let mut b_mat = DMatrix::zeros(n+1, m);
+        b_mat.view_mut((0,0), (n, m)).copy_from(&a_mat);
+        b_mat.view_mut((n,0), (1, m)).copy_from_slice(delta_f_i.as_slice());
+
+        let p_mat_i = &self.p_matrices[*i];
+        let c_mat = p_mat_i * b_mat;
+        let d_mat_t = c_mat.view((0,0), (n, m));
+        let lagrange_multiplier_row = c_mat.view((n,0), (1, m));
+        let inf_norm = lagrange_multiplier_row.iter().max_by(|x, y| x.abs().partial_cmp(&y.abs()).unwrap()).expect("error").abs();
+
+        if !recursive_call {
+            *delta_f_hat_mat_t = &self.delta_x_mat_t * d_mat_t;
+        }
+
+        *i = (*i + 1) % self.p_matrices.len();
+
+        return if inf_norm > self.lagrange_multiplier_inf_norm_cutoff {
+            self.derivative_internal(inputs, function, true, Some(f0), delta_f_hat_mat_t, i, num_f_calls)
+        } else {
+            (f0.as_slice().to_vec(), d_mat_t.transpose())
+        }
+    }
+}
+impl DerivativeMethodTrait for WASP {
+    type T = f64;
+
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+        let mut i = self.i.lock().expect("error");
+        let mut delta_f_hat_mat_t = self.delta_f_hat_mat_t.lock().expect("error");
+        let mut num_f_calls = self.num_f_calls.lock().expect("error");
+        *num_f_calls = 0;
+
+        return self.derivative_internal::<D>(inputs, function, false, None, &mut *delta_f_hat_mat_t, &mut *i, &mut *num_f_calls);
+    }
+}
+
 
 pub struct DerivativeMethodClassAlwaysZero;
 impl DerivativeMethodClass for DerivativeMethodClassAlwaysZero {
