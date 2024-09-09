@@ -750,17 +750,14 @@ pub struct WASP {
     #[allow(unused)]
     r: usize,
     i: Arc<Mutex<usize>>,
-    num_f_calls: Arc<Mutex<usize>>,
-    max_iters: usize,
+    num_f_calls: Arc<Mutex<usize>>
 }
 impl WASP {
-    pub fn new(num_inputs: usize, num_outputs: usize, lagrange_multiplier_inf_norm_cutoff: f64, max_iters: usize) -> Self {
-        assert!(max_iters >= 1);
-
+    pub fn new(num_inputs: usize, num_outputs: usize, lagrange_multiplier_inf_norm_cutoff: f64) -> Self {
         let n = num_inputs;
         let m = num_outputs;
 
-        let r = n + 5;
+        let r = n + 1;
 
         let mut rng = rand::thread_rng();
         let mut mm = DMatrix::zeros(n, r);
@@ -797,7 +794,6 @@ impl WASP {
             r,
             i: Arc::new(Mutex::new(0)),
             num_f_calls: Arc::new(Mutex::new(0)),
-            max_iters,
         }
     }
 
@@ -807,7 +803,7 @@ impl WASP {
     }
 
     #[inline(always)]
-    fn derivative_internal<D: DifferentiableFunctionTrait<f64> + ?Sized>(&self, inputs: &[f64], function: &D, _recursive_call: bool, f0: Option<DVector<f64>>, delta_f_hat_mat_t: &mut DMatrix<f64>, i: &mut usize, num_f_calls: &mut usize, curr_count: usize) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative_internal<D: DifferentiableFunctionTrait<f64> + ?Sized>(&self, inputs: &[f64], function: &D, _recursive_call: bool, f0: Option<DVector<f64>>, delta_f_hat_mat_t: &mut DMatrix<f64>, i: &mut usize, num_f_calls: &mut usize) -> (Vec<f64>, DMatrix<f64>) {
         let n = self.n;
         let m = self.m;
 
@@ -843,8 +839,8 @@ impl WASP {
 
         *i = (*i + 1) % self.p_matrices.len();
 
-        return if inf_norm > self.lagrange_multiplier_inf_norm_cutoff && !(curr_count >= self.max_iters) {
-            self.derivative_internal(inputs, function, true, Some(f0), delta_f_hat_mat_t, i, num_f_calls, curr_count + 1)
+        return if inf_norm > self.lagrange_multiplier_inf_norm_cutoff {
+            self.derivative_internal(inputs, function, true, Some(f0), delta_f_hat_mat_t, i, num_f_calls)
         } else {
             *delta_f_hat_mat_t = &self.delta_x_mat_t * d_mat_t;
             (f0.as_slice().to_vec(), d_mat_t.transpose())
@@ -861,10 +857,37 @@ impl DerivativeMethodTrait for WASP {
         let mut num_f_calls = self.num_f_calls.lock().expect("error");
         *num_f_calls = 0;
 
-        return self.derivative_internal::<D>(inputs, function, false, None, &mut *delta_f_hat_mat_t, &mut *i, &mut *num_f_calls, 1);
+        return self.derivative_internal::<D>(inputs, function, false, None, &mut *delta_f_hat_mat_t, &mut *i, &mut *num_f_calls);
     }
 }
 
+#[derive(Clone)]
+pub struct SPSA;
+impl SPSA {
+    pub fn new() -> Self { Self {} }
+}
+impl DerivativeMethodTrait for SPSA {
+    type T = f64;
+
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+        let f0 = function.call(inputs, false);
+
+        let mut rng = rand::thread_rng();
+
+        let epsilon = 0.0001;
+
+        let r: Vec<f64> = (0..inputs.len()).into_iter().map(|_x| rng.gen_range(-1.0..=1.0)).collect();
+        let x = DVector::from_column_slice(inputs);
+        let delta_k = DVector::from_column_slice(&r);
+        let xpos = &x + &delta_k;
+        let xneg = &x - &delta_k;
+        let v = (&xpos - &xneg) / (2.0 * epsilon);
+        let delta_k_inverse = DVector::from_column_slice(&delta_k.iter().map(|x| 1.0 / *x).collect::<Vec<f64>>());
+        let out = v * delta_k_inverse.transpose();
+
+        (f0, out)
+    }
+}
 
 pub struct DerivativeMethodClassAlwaysZero;
 impl DerivativeMethodClass for DerivativeMethodClassAlwaysZero {
