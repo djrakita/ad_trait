@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 // use apollo_rust_linalg::{ApolloDMatrixTrait, ApolloDVectorTrait, M, V};
 use nalgebra::{DMatrix, DVector};
+use num_traits::Pow;
 use rand::Rng;
 use crate::{AD};
 use crate::forward_ad::adfn::adfn;
@@ -862,6 +863,142 @@ impl DerivativeMethodTrait for WASP {
         *num_f_calls = 0;
 
         return self.derivative_internal::<D>(inputs, function, false, None, &mut *delta_f_hat_mat_t, &mut *i, &mut *num_f_calls, 1);
+    }
+}
+
+pub fn math_modulus(a: i64, b: i64) -> usize {
+    (((a % b) + b) % b) as usize
+}
+
+#[derive(Clone)]
+pub struct WASP2 {
+    n: usize,
+    m: usize,
+    r: usize,
+    i: Arc<Mutex<usize>>,
+    delta_x_mat: DMatrix<f64>,
+    delta_f_hat_mat_t: Arc<Mutex<DMatrix<f64>>>,
+    c1_mats: Vec<DMatrix<f64>>,
+    c2_mats: Vec<DMatrix<f64>>,
+    gamma: f64,
+    num_f_calls: Arc<Mutex<usize>>,
+    max_iters: usize
+}
+impl WASP2 {
+    pub fn new(num_inputs: usize, num_outputs: usize, lagrange_multiplier_inf_norm_cutoff: f64, max_iters: usize) -> Self {
+        assert!(max_iters >= 1);
+
+        let n = num_inputs;
+        let m = num_outputs;
+
+        let r = n + 1;
+        let alpha = 0.99;
+
+        let mut rng = rand::thread_rng();
+        let mut mm = DMatrix::zeros(n, r);
+
+        for i in 0..n {
+            for j in 0..r {
+                mm[(i, j)] = rng.gen_range(-1.0..=1.0);
+            }
+        }
+
+        let delta_x_mat = mm;
+        let delta_x_mat_t = delta_x_mat.transpose();
+        let delta_f_hat_mat_t = DMatrix::zeros(r, m);
+
+        // for i in 0..r {
+        //     for j in 0..m {
+        //         delta_f_hat_mat_t[(i, j)] = rng.gen_range(-10000.0..=10000.0);
+        //     }
+        // }
+
+        let mut c1_mats = vec![];
+        let mut c2_mats = vec![];
+
+        for i in 0..r {
+            let delta_x_i = DVector::from_column_slice(delta_x_mat.column(i).as_slice());
+            let mut w_i_mat = DMatrix::<f64>::zeros(r, r);
+            for j in 0..r {
+                let m = math_modulus( i as i64 - j as i64, r as i64 );
+                let exp = m as f64 / ((r-1) as f64);
+                w_i_mat[(j,j)] = (alpha*(1.0 - alpha)).pow(exp);
+            }
+
+            let w_i_mat_2 = &w_i_mat * &w_i_mat;
+            let upper_left = 2.0 * &delta_x_mat * &w_i_mat_2 * &delta_x_mat_t;
+
+            let mut c1_mat = DMatrix::zeros(n + 1, n + 1);
+            c1_mat.view_mut((0,0), (n, n)).copy_from(&upper_left);
+            c1_mat.view_mut((0, n), (n, 1)).copy_from(&-&delta_x_i);
+            c1_mat.view_mut((n,0), (1, n)).copy_from(&delta_x_i.transpose());
+            c1_mats.push(c1_mat.try_inverse().unwrap());
+
+            let c2_mat = 2.0 * &delta_x_mat * &w_i_mat_2;
+            c2_mats.push(c2_mat);
+        }
+
+        Self {
+            n,
+            m,
+            r,
+            i: Arc::new(Mutex::new(0)),
+            delta_x_mat,
+            delta_f_hat_mat_t: Arc::new(Mutex::new(delta_f_hat_mat_t)),
+            c1_mats,
+            c2_mats,
+            gamma: lagrange_multiplier_inf_norm_cutoff,
+            num_f_calls: Arc::new(Mutex::new(0)),
+            max_iters,
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_num_f_calls(&self) -> usize {
+        *self.num_f_calls.lock().expect("error")
+    }
+}
+impl DerivativeMethodTrait for WASP2 {
+    type T = f64;
+
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+        let mut num_f_calls = self.num_f_calls.lock().unwrap();
+        let f_x_k = function.call(inputs, false);
+        *num_f_calls = 1;
+        let n = self.n;
+        let m = self.m;
+        let r = self.r;
+        let epsilon = 0.00001;
+        let mut iter_count = 0;
+
+        loop {
+            let mut i = self.i.lock().unwrap();
+            let mut delta_f_hat_mat_t = self.delta_f_hat_mat_t.lock().unwrap();
+            let c_1 = &self.c1_mats[*i];
+            let c_2 = &self.c2_mats[*i];
+            let delta_x_i = DVector::from_column_slice(&self.delta_x_mat.column(*i).as_slice());
+            let xh: Vec<f64> = inputs.iter().zip(delta_x_i.iter()).map(|(x, y)| *x + epsilon* *y).collect();
+            let fh = function.call(&xh, false);
+            *num_f_calls += 1;
+            let delta_f_i: Vec<f64> = fh.iter().zip(f_x_k.iter()).map(|(x, y)| (*x - *y) / epsilon).collect();
+            let delta_f_i = DVector::from_column_slice(&delta_f_i);
+            delta_f_hat_mat_t.set_row(*i, &delta_f_i.transpose());
+            let top = c_2 * &*delta_f_hat_mat_t;
+            let mut tmp = DMatrix::zeros(n+1, m);
+            tmp.view_mut((0,0), (n, m)).copy_from(&top);
+            tmp.view_mut((n,0), (1, m)).copy_from(&delta_f_i.transpose());
+            let res = c_1 * &tmp;
+            let d_t = res.view((0,0), (n, m));
+            let lambda_t = res.view((n, 0), (1, m));
+            let inf_norm = lambda_t.iter().max_by(|x, y| x.abs().partial_cmp(&y.abs()).unwrap()).unwrap().abs();
+            *i = (*i + 1) % r;
+            iter_count += 1;
+
+            // println!("{:?}", inf_norm);
+            if inf_norm < self.gamma || iter_count >= self.max_iters {
+                return (f_x_k, d_t.transpose())
+            }
+        }
     }
 }
 
