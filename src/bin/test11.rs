@@ -1,5 +1,5 @@
 use ad_trait::AD;
-use ad_trait::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionTrait, FiniteDifferencing, WASP2};
+use ad_trait::differentiable_function::{DifferentiableFunctionTrait, WASP2};
 
 pub struct Test;
 impl<T: AD> DifferentiableFunctionTrait<T> for Test {
@@ -17,7 +17,9 @@ impl<T: AD> DifferentiableFunctionTrait<T> for Test {
 }
 
 fn main() {
-    let w = WASP2::new(2, 2, 0.01, 10);
+    let w = WASP2::new(10, 1, 0.01, 10);
+
+    /*
     let res = w.derivative(&[0.,0.], &Test);
     println!("{:?}", res);
 
@@ -33,4 +35,5 @@ fn main() {
     let fd = FiniteDifferencing::new();
     let res = fd.derivative(&[-0.01,0.01], &Test);
     println!("{:?}", res);
+    */
 }
