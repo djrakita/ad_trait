@@ -1039,7 +1039,21 @@ pub fn get_tangent_matrix(n: usize, orthonormalize: bool) -> DMatrix<f64> {
 }
 
 pub fn wasp_projection<D: DifferentiableFunctionTrait<f64> + ?Sized>(f: &D, f_x_k: &DVector<f64>, x_k: &[f64], cache: &WASPCache) -> DMatrix<f64> {
-    let epsilon = 0.000001;
+    let epsilon = 0.00001;
+    let x_k = DVector::from_column_slice(x_k);
+    let i = cache.i.lock().unwrap();
+    let c_1_mat = &cache.c_1_mats[*i];
+    let c_2_mat = &cache.c_2_mats[*i];
+    let delta_x_i = DVector::from_column_slice(cache.delta_x_mat.column(*i).as_slice());
+    let f_x_k_delta = DVector::from_column_slice(&f.call((&x_k + epsilon*&delta_x_i).as_slice(), true));
+    let delta_f_i = (f_x_k_delta - f_x_k) / epsilon;
+    let mut delta_f_hat_t = cache.delta_f_mat_t.lock().unwrap();
+    delta_f_hat_t.set_row(*i, &delta_f_i.transpose());
+    return c_1_mat*&*delta_f_hat_t + c_2_mat*&delta_f_i.transpose();
+}
+
+pub fn wasp_projection2<D: DifferentiableFunctionTrait<f64> + ?Sized>(f: &D, f_x_k: &DVector<f64>, x_k: &[f64], cache: &WASPCache2) -> DMatrix<f64> {
+    let epsilon = 0.00001;
     let x_k = DVector::from_column_slice(x_k);
     let i = cache.i.lock().unwrap();
     let c_1_mat = &cache.c_1_mats[*i];
@@ -1060,6 +1074,10 @@ pub fn close_enough(d_a_t_mat: &DMatrix<f64>, d_b_t_mat: &DMatrix<f64>, l: usize
 
     let js: Vec<usize> = numbers.into_iter().take(l).collect();
 
+    // println!("{}", d_a_t_mat);
+    // println!("{}", d_b_t_mat);
+    // println!("---");
+
     for j in js {
         let d_a = DVector::from_column_slice(d_a_t_mat.column(j).as_slice());
         let d_b = DVector::from_column_slice(d_b_t_mat.column(j).as_slice());
@@ -1069,11 +1087,44 @@ pub fn close_enough(d_a_t_mat: &DMatrix<f64>, d_b_t_mat: &DMatrix<f64>, l: usize
 
         let dot = d_a.dot(&d_b);
         let angle = (dot / (d_a_n * d_b_n)).acos();
+        // println!("{:?}", angle);
 
         if angle > d_theta { return false; }
     }
 
     return true;
+}
+
+#[inline(always)]
+pub fn close_enough2(a: &DVector<f64>, b: &DVector<f64>, d_theta: f64, d_l: f64) -> bool {
+    let an = a.norm();
+    let bn = b.norm();
+    let d = a.dot(b);
+
+    if (d / (an * bn) - 1.0).abs() > d_theta { return false; }
+    if (an / bn - 1.0).abs() > d_l { return false; }
+
+    return true;
+}
+
+pub fn derivative_angular_distance(d_a_t_mat: &DMatrix<f64>, d_b_t_mat: &DMatrix<f64>) -> f64 {
+    let m = d_a_t_mat.ncols();
+
+    let mut max_angle = f64::MIN;
+
+    for j in 0..m {
+        let d_a = DVector::from_column_slice(d_a_t_mat.column(j).as_slice());
+        let d_b = DVector::from_column_slice(d_b_t_mat.column(j).as_slice());
+
+        let d_a_n = d_a.norm();
+        let d_b_n = d_b.norm();
+
+        let dot = d_a.dot(&d_b);
+        let angle = (dot / (d_a_n * d_b_n)).acos();
+        if angle > max_angle { max_angle = angle; }
+    }
+
+    return max_angle;
 }
 
 #[derive(Clone)]
@@ -1118,6 +1169,111 @@ impl WASPCache {
     }
 }
 
+#[derive(Clone)]
+pub struct WASPCache2 {
+    pub delta_f_mat_t: Arc<Mutex<DMatrix<f64>>>,
+    pub delta_x_mat: DMatrix<f64>,
+    pub c_1_mats: Vec<DMatrix<f64>>,
+    pub c_2_mats: Vec<DVector<f64>>,
+    pub i: Arc<Mutex<usize>>
+}
+impl WASPCache2 {
+    pub fn new(n: usize, m: usize, orthonormalize: bool) -> Self {
+        let delta_x_mat = get_tangent_matrix(n, orthonormalize);
+        let mut c_1_mats = vec![];
+        let mut c_2_mats = vec![];
+
+        for i in 0..n {
+            let delta_x_i = DVector::from_column_slice(delta_x_mat.column(i).as_slice());
+            let a_i_mat = 2.0*(&delta_x_mat * &delta_x_mat.transpose());
+            let a_i_mat_inv = a_i_mat.clone().try_inverse().unwrap();
+            let s_i = (&delta_x_i.transpose() * &a_i_mat_inv * &delta_x_i)[0];
+            let s_i_inv = 1.0 / s_i;
+            let c_1_mat = &a_i_mat_inv*(DMatrix::identity(n, n) - s_i_inv*&delta_x_i*&delta_x_i.transpose()*&a_i_mat_inv)*2.0*&delta_x_mat;
+            let c_2_mat = s_i_inv*&a_i_mat_inv*&delta_x_i;
+            c_1_mats.push(c_1_mat);
+            c_2_mats.push(c_2_mat);
+        }
+
+        Self {
+            delta_f_mat_t: Arc::new(Mutex::new(DMatrix::zeros(n, m))),
+            delta_x_mat,
+            c_1_mats,
+            c_2_mats,
+            i: Arc::new(Mutex::new(0)),
+        }
+    }
+}
+
+pub struct DerivativeMethodClassWASP;
+impl DerivativeMethodClass for DerivativeMethodClassWASP {
+    type DerivativeMethod = WASP;
+}
+
+#[derive(Clone)]
+pub struct WASP {
+    pub cache: WASPCache2,
+    pub d_theta: f64,
+    pub d_l: f64,
+    pub num_f_calls: Arc<Mutex<usize>>
+}
+impl WASP {
+    pub fn new(n: usize, m: usize, d_theta: f64, d_l: f64, orthonormalize: bool) -> Self {
+        Self {
+            cache: WASPCache2::new(n, m, orthonormalize),
+            d_theta,
+            d_l,
+            num_f_calls: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    pub fn get_num_f_calls(&self) -> usize {
+        self.num_f_calls.lock().unwrap().clone()
+    }
+}
+impl DerivativeMethodTrait for WASP {
+    type T = f64;
+
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+        let mut num_f_calls = self.num_f_calls.lock().unwrap();
+        *num_f_calls = 0;
+        let f_x_k_vec = function.call(inputs, false);
+        let f_x_k = DVector::from_column_slice(&f_x_k_vec);
+        let x_k = DVector::from_column_slice(inputs);
+        *num_f_calls += 1;
+
+        let mut return_result;
+
+        loop {
+            let mut i = self.cache.i.lock().unwrap();
+
+            let epsilon = 0.00001;
+            let c_1_mat = &self.cache.c_1_mats[*i];
+            let c_2_mat = &self.cache.c_2_mats[*i];
+            let delta_x_i = DVector::from_column_slice(self.cache.delta_x_mat.column(*i).as_slice());
+            let f_x_k_delta = DVector::from_column_slice(&function.call((&x_k + epsilon * &delta_x_i).as_slice(), true));
+            *num_f_calls += 1;
+            let delta_f_i = (f_x_k_delta - &f_x_k) / epsilon;
+            let mut delta_f_hat_t = self.cache.delta_f_mat_t.lock().unwrap();
+            let delta_f_i_hat = DVector::from_column_slice(delta_f_hat_t.row(*i).transpose().as_slice());
+
+            return_result = close_enough2(&delta_f_i, &delta_f_i_hat, self.d_theta, self.d_l);
+
+            delta_f_hat_t.set_row(*i, &delta_f_i.transpose());
+            let d_t = c_1_mat * &*delta_f_hat_t + c_2_mat * &delta_f_i.transpose();
+            *delta_f_hat_t = &self.cache.delta_x_mat.transpose() * &d_t;
+
+            *i = (*i + 1) % inputs.len();
+
+            if return_result {
+                return (f_x_k_vec, d_t.transpose());
+            }
+        }
+    }
+}
+
+
+
 pub struct DerivativeMethodClassWASPNec;
 impl DerivativeMethodClass for DerivativeMethodClassWASPNec {
     type DerivativeMethod = WASPNec;
@@ -1125,26 +1281,35 @@ impl DerivativeMethodClass for DerivativeMethodClassWASPNec {
 #[derive(Clone)]
 pub struct WASPNec {
     pub cache: WASPCache,
-    pub first_call: Arc<Mutex<bool>>
+    pub first_call: Arc<Mutex<bool>>,
+    pub num_f_calls: Arc<Mutex<usize>>
 }
 impl WASPNec {
     pub fn new(n: usize, m: usize, alpha: f64, orthonormalize: bool) -> Self {
         Self {
             cache: WASPCache::new(n, m, alpha, orthonormalize),
             first_call: Arc::new(Mutex::new(true)),
+            num_f_calls: Arc::new(Mutex::new(0)),
         }
+    }
+
+    pub fn get_num_f_calls(&self) -> usize {
+        self.num_f_calls.lock().unwrap().clone()
     }
 }
 impl DerivativeMethodTrait for WASPNec {
     type T = f64;
 
     fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+        let mut num_f_calls = self.num_f_calls.lock().unwrap();
+        *num_f_calls = 0;
         let f_x_k_vec = function.call(inputs, false);
         let f_x_k = DVector::from_column_slice(&f_x_k_vec);
+        *num_f_calls += 1;
 
         let mut first_call = self.first_call.lock().unwrap();
         if *first_call {
-            let epsilon = 0.000001;
+            let epsilon = 0.00001;
             let x_k = DVector::from_column_slice(inputs);
             let n = inputs.len();
             for i in 0..n {
@@ -1158,6 +1323,7 @@ impl DerivativeMethodTrait for WASPNec {
         }
 
         let d_t = wasp_projection(function, &f_x_k, inputs, &self.cache);
+        *num_f_calls += 1;
         let mut i = self.cache.i.lock().unwrap();
         *i = (*i + 1) % inputs.len();
 
@@ -1175,7 +1341,8 @@ pub struct WASPEc {
     pub cache_a: WASPCache,
     pub cache_b: WASPCache,
     pub l: usize,
-    pub d_theta: f64
+    pub d_theta: f64,
+    pub num_f_calls: Arc<Mutex<usize>>
 }
 impl WASPEc {
     pub fn new(n: usize, m: usize, alpha: f64, orthonormalize: bool, l: usize, d_theta: f64) -> Self {
@@ -1186,26 +1353,35 @@ impl WASPEc {
             cache_b: WASPCache::new(n, m, alpha, orthonormalize),
             l,
             d_theta,
+            num_f_calls: Arc::new(Mutex::new(0)),
         }
+    }
+
+    pub fn get_num_f_calls(&self) -> usize {
+        self.num_f_calls.lock().unwrap().clone()
     }
 }
 impl DerivativeMethodTrait for WASPEc {
     type T = f64;
 
     fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+        let mut num_f_calls = self.num_f_calls.lock().unwrap();
+        *num_f_calls = 0;
         let f_x_k_vec = function.call(inputs, false);
         let f_x_k = DVector::from_column_slice(&f_x_k_vec);
+        *num_f_calls += 1;
 
         loop {
             let d_a_t = wasp_projection(function, &f_x_k, inputs, &self.cache_a);
             let d_b_t = wasp_projection(function, &f_x_k, inputs, &self.cache_b);
+            *num_f_calls += 2;
             let mut i_a = self.cache_a.i.lock().unwrap();
             let mut i_b = self.cache_b.i.lock().unwrap();
             *i_a = (*i_a + 1) % inputs.len();
             *i_b = (*i_b + 1) % inputs.len();
 
             if close_enough(&d_a_t, &d_b_t, self.l, function.num_outputs(), self.d_theta) {
-                return (f_x_k_vec, d_a_t.transpose());
+                return (f_x_k_vec, (d_a_t.transpose() + d_b_t.transpose()) * 0.5);
             }
         }
     }
