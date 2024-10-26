@@ -4,7 +4,7 @@ use ad_trait::differentiable_function::{derivative_angular_distance, DerivativeM
 pub struct Test;
 impl<T: AD> DifferentiableFunctionTrait<T> for Test {
     fn call(&self, inputs: &[T], _freeze: bool) -> Vec<T> {
-        vec![ inputs[0].sin() + inputs[1].cos(), inputs[3]*inputs[2].sin() + inputs[4] ]
+        vec![ inputs[0].sin() + inputs[1].cos() ]
     }
 
     fn num_inputs(&self) -> usize {
@@ -12,15 +12,14 @@ impl<T: AD> DifferentiableFunctionTrait<T> for Test {
     }
 
     fn num_outputs(&self) -> usize {
-        2
+        1
     }
 }
 
 fn main() {
     // let w = WASPNec::new(5, 2, 0.99, true);
     // let w = WASPEc::new(5, 2, 0.9, true, 2, 0.33);
-    let w = WASP::new(5, 2, 0.1, 0.1, true);
-    println!("{}", w.cache.delta_f_mat_t.lock().unwrap());
+    let w = WASP::new(5, 1, 0.3, 0.3, true);
 
     let res = w.derivative(&[1.,2., 0., 0., 0.], &Test);
     println!("{:?}", res);
