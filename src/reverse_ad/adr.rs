@@ -500,6 +500,7 @@ impl GlobalComputationGraph {
     pub fn spawn_value(&self, value: f64) -> adr {
         unsafe { return (*self.0).spawn_variable(value) }
     }
+    #[allow(static_mut_refs)]
     pub fn get() -> GlobalComputationGraph {
         let computation_graph = unsafe { _GLOBAL_COMPUTATION_GRAPHS.get_or_init(|| ComputationGraph::new()) };
         let r: *const ComputationGraph = computation_graph;
