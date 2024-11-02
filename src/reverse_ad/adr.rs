@@ -1073,7 +1073,7 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
 }
 */
 
-impl<D: DimName> Mul<OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D> {
+impl<D: DimName> Mul<OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
     type Output = OPoint<adr, D>;
 
     fn mul(self, rhs: OPoint<adr, D>) -> Self::Output {
@@ -1085,7 +1085,7 @@ impl<D: DimName> Mul<OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::a
     }
 }
 
-impl<D: DimName> Mul<&OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D> {
+impl<D: DimName> Mul<&OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
     type Output = OPoint<adr, D>;
 
     fn mul(self, rhs: &OPoint<adr, D>) -> Self::Output {
@@ -1636,5 +1636,21 @@ impl SubsetOf<adr> for i128 {
 
     fn is_in_subset(_: &adr) -> bool {
         false
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+unsafe impl Dim for adr {
+    fn try_to_usize() -> Option<usize> {
+        unimplemented!()
+    }
+
+    fn value(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn from_usize(_dim: usize) -> Self {
+        unimplemented!()
     }
 }

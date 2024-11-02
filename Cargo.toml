@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = { version="0.32.*", features=["rand", "alloc", "std", "libm"] }
+# nalgebra = { version="0.32.*", features=["rand", "alloc", "std", "libm"] }
+nalgebra = { version = "0.33.0", features = ["rand", "serde-serialize", "alloc", "std", "libm"] }
 # nalgebra = { version = "0.33.0",  features=["rand", "alloc", "std", "libm"] }
 num-traits = "*"
 # simba = { git = "https://github.com/dimforge/simba", features = ["packed_simd"] }
@@ -26,8 +27,9 @@ vek = {version = "*", features = ['vec8', 'vec16', 'vec32', 'vec64'] }
 serde = { version="1.0", features=["derive"] }
 serde_json = { version="1.0.100" }
 # nalgebra-sparse = "0.9.0"
-ndarray = "0.15.6"
-bevy_reflect = { version="0.11.1" }
+# ndarray = "0.15.6"
+ndarray = "0.16.1"
+bevy_reflect = { version="0.14.2" }
 serde_with = { version="3.2.0" }
 as-any = "0.3.1"
 # apollo-rust-linalg = { git = "https://github.com/Apollo-Lab-Yale/apollo-rust", package = "apollo-rust-linalg" }

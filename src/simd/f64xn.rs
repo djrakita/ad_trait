@@ -851,7 +851,7 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
 }
 */
 
-impl<const N: usize, D: DimName> Mul<OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D> {
+impl<const N: usize, D: DimName> Mul<OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
     type Output = OPoint<f64xn<N>, D>;
 
     fn mul(self, rhs: OPoint<f64xn<N>, D>) -> Self::Output {
@@ -863,7 +863,7 @@ impl<const N: usize, D: DimName> Mul<OPoint<f64xn<N>, D>> for f64xn<N> where Def
     }
 }
 
-impl<const N: usize, D: DimName> Mul<&OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D> {
+impl<const N: usize, D: DimName> Mul<&OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
     type Output = OPoint<f64xn<N>, D>;
 
     fn mul(self, rhs: &OPoint<f64xn<N>, D>) -> Self::Output {
@@ -1495,5 +1495,21 @@ impl<const N: usize> SubsetOf<f64xn<N>> for i128 {
 
     fn is_in_subset(_: &f64xn<N>) -> bool {
         false
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+unsafe impl<const N: usize> Dim for f64xn<N> {
+    fn try_to_usize() -> Option<usize> {
+        unimplemented!()
+    }
+
+    fn value(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn from_usize(_dim: usize) -> Self {
+        unimplemented!()
     }
 }

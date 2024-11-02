@@ -872,7 +872,7 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
 }
 */
 
-impl<const N: usize, D: DimName> Mul<OPoint<adfn<N>, D>> for adfn<N> where DefaultAllocator: nalgebra::allocator::Allocator<adfn<N>, D> {
+impl<const N: usize, D: DimName> Mul<OPoint<adfn<N>, D>> for adfn<N> where DefaultAllocator: nalgebra::allocator::Allocator<adfn<N>, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
     type Output = OPoint<adfn<N>, D>;
 
     fn mul(self, rhs: OPoint<adfn<N>, D>) -> Self::Output {
@@ -884,7 +884,7 @@ impl<const N: usize, D: DimName> Mul<OPoint<adfn<N>, D>> for adfn<N> where Defau
     }
 }
 
-impl<const N: usize, D: DimName> Mul<&OPoint<adfn<N>, D>> for adfn<N> where DefaultAllocator: nalgebra::allocator::Allocator<adfn<N>, D> {
+impl<const N: usize, D: DimName> Mul<&OPoint<adfn<N>, D>> for adfn<N> where DefaultAllocator: nalgebra::allocator::Allocator<adfn<N>, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
     type Output = OPoint<adfn<N>, D>;
 
     fn mul(self, rhs: &OPoint<adfn<N>, D>) -> Self::Output {
@@ -1576,3 +1576,16 @@ impl<const N: usize> SubsetOf<adfn<N>> for i128 {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+unsafe impl<const N: usize> Dim for adfn<N> {
+    fn try_to_usize() -> Option<usize> {
+        unimplemented!()
+    }
+
+    fn value(&self) -> usize {
+        unimplemented!()
+    }
+
+    fn from_usize(_dim: usize) -> Self {
+        unimplemented!()
+    }
+}
