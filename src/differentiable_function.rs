@@ -1,14 +1,14 @@
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use nalgebra::{DMatrix, DVector};
-use num_traits::Pow;
 use rand::{Rng, thread_rng};
-use rand::prelude::SliceRandom;
+use rand::distributions::Uniform;
 use crate::{AD};
 use crate::forward_ad::adfn::adfn;
 use crate::forward_ad::ForwardADTrait;
 use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
 use crate::simd::f64xn::f64xn;
+use rand::distributions::Distribution;
 
 pub trait DifferentiableFunctionClass {
     type FunctionType<T: AD> : DifferentiableFunctionTrait<T>;
@@ -151,7 +151,6 @@ impl DerivativeMethodTrait for ReverseAD {
             inputs_ad.push(adr::new_variable(*input, false));
         }
 
-        // let f = D::call(&inputs_ad, args);
         let f = function.call(&inputs_ad, false);
         assert_eq!(f.len(), num_outputs);
         let out_value = f.iter().map(|x| x.value()).collect();
@@ -379,6 +378,146 @@ impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
 
         return (out_value, out_derivative)
     }
+}
+
+#[derive(Clone)]
+pub struct WASP {
+    cache: Arc<RwLock<WASPCache>>,
+    num_f_calls: Arc<RwLock<usize>>,
+    d_theta: f64,
+    d_ell: f64
+}
+impl WASP {
+    pub fn new(n: usize, m: usize, orthonormal_delta_x: bool, d_theta: f64, d_ell: f64) -> Self {
+        Self {
+            cache: Arc::new(RwLock::new(WASPCache::new(n, m, orthonormal_delta_x))),
+            num_f_calls: Arc::new(RwLock::new(0)),
+            d_theta,
+            d_ell,
+        }
+    }
+    pub fn new_default(n: usize, m: usize) -> Self {
+        Self::new(n, m, true, 0.3, 0.3)
+    }
+    pub fn num_f_calls(&self) -> usize {
+        return self.num_f_calls.read().unwrap().clone()
+    }
+}
+impl DerivativeMethodTrait for WASP {
+    type T = f64;
+
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+        let mut num_f_calls = 0;
+        let f_k = function.call(inputs, false);
+        let f_k_dv = DVector::from_column_slice(&f_k);
+        num_f_calls += 1;
+        let epsilon = 0.000001;
+
+        let mut cache = self.cache.write().unwrap();
+        let n = inputs.len();
+
+        let x = DVector::<f64>::from_column_slice(inputs);
+
+        loop {
+            let i = cache.i.clone();
+
+            let delta_x_i = cache.delta_x.column(i);
+
+            let x_k_plus_delta_x_i = &x + epsilon*&delta_x_i;
+            let f_k_plus_delta_x_i = DVector::<f64>::from_column_slice(&function.call(x_k_plus_delta_x_i.as_slice(), true));
+            num_f_calls += 1;
+            let delta_f_i = (&f_k_plus_delta_x_i - &f_k_dv) / epsilon;
+            let delta_f_i_hat = cache.delta_f_t.row(i);
+            let delta_f_i_hat = DVector::from_column_slice(delta_f_i_hat.transpose().as_slice());
+            let return_result = close_enough(&delta_f_i, &delta_f_i_hat, self.d_theta, self.d_ell);
+
+            cache.delta_f_t.set_row(i, &delta_f_i.transpose());
+            let c_1_mat = &cache.c_1[i];
+            let c_2_mat = &cache.c_2[i];
+            let delta_f_t = &cache.delta_f_t;
+
+            let d_t_star = c_1_mat*delta_f_t + c_2_mat*delta_f_i.transpose();
+            let d_star = d_t_star.transpose();
+
+            let tmp = &d_star * &cache.delta_x;
+            cache.delta_f_t = tmp.transpose();
+
+            let mut new_i = i + 1;
+            if new_i >= n { new_i = 0; }
+            cache.i = new_i;
+
+            if return_result {
+                *self.num_f_calls.write().unwrap() = num_f_calls;
+                return (f_k, d_star);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct WASPCache {
+    pub i: usize,
+    pub delta_f_t: DMatrix<f64>,
+    pub delta_x: DMatrix<f64>,
+    pub c_1: Vec<DMatrix<f64>>,
+    pub c_2: Vec<DVector<f64>>
+}
+impl WASPCache {
+    pub fn new(n: usize, m: usize, orthonormal_delta_x: bool) -> Self {
+        let delta_f_t = DMatrix::<f64>::identity(n, m);
+        let delta_x = get_tangent_matrix(n, orthonormal_delta_x);
+        let mut c_1 = vec![];
+        let mut c_2 = vec![];
+
+        let a_mat = 2.0 * &delta_x * &delta_x.transpose();
+        let a_inv_mat = a_mat.try_inverse().unwrap();
+
+        for i in 0..n {
+            let delta_x_i = DVector::<f64>::from_column_slice(delta_x.column(i).as_slice());
+            let s_i = (delta_x_i.transpose() * &a_inv_mat * &delta_x_i)[(0,0)];
+            let s_i_inv = 1.0 / s_i;
+            let c_1_mat = &a_inv_mat * (DMatrix::<f64>::identity(n, n) - s_i_inv * &delta_x_i * delta_x_i.transpose() * &a_inv_mat) * 2.0 * &delta_x;
+            let c_2_mat = s_i_inv * &a_inv_mat * delta_x_i;
+            c_1.push(c_1_mat);
+            c_2.push(c_2_mat);
+        }
+
+        return Self {
+            i: 0,
+            delta_f_t,
+            delta_x,
+            c_1,
+            c_2,
+        }
+    }
+}
+
+pub (crate) fn get_tangent_matrix(n: usize, orthogonal: bool) -> DMatrix<f64> {
+    let mut rng = thread_rng();
+    let uniform = Uniform::new(-1.0, 1.0);
+
+    let t = DMatrix::<f64>::from_fn(n, n, |_, _| uniform.sample(&mut rng));
+
+    return if orthogonal {
+        let svd = t.svd(true, true);
+        let delta_x = svd.u.as_ref().unwrap() * svd.v_t.as_ref().unwrap();
+        delta_x
+    } else {
+        t
+    }
+}
+
+pub (crate) fn close_enough(a: &DVector<f64>, b: &DVector<f64>, d_theta: f64, d_ell: f64) -> bool {
+    let a_n = a.norm();
+    let b_n = b.norm();
+
+    let tmp = ((a.dot(&b) / ( a_n*b_n )) - 1.0).abs();
+    if tmp > d_theta { return false; }
+
+    let tmp = ((a_n / b_n) - 1.0).abs();
+    if tmp > d_ell { return false; }
+
+    return true;
 }
 
 /*
