@@ -514,8 +514,18 @@ pub (crate) fn close_enough(a: &DVector<f64>, b: &DVector<f64>, d_theta: f64, d_
     let tmp = ((a.dot(&b) / ( a_n*b_n )) - 1.0).abs();
     if tmp > d_theta { return false; }
 
-    let tmp = ((a_n / b_n) - 1.0).abs();
-    if tmp > d_ell { return false; }
+    let tmp1 = if b_n != 0.0 {
+        ((a_n / b_n) - 1.0).abs()
+    } else {
+        f64::MAX
+    };
+    let tmp2 = if a_n != 0.0 {
+        ((b_n / a_n) - 1.0).abs()
+    } else {
+        f64::MAX
+    };
+
+    if f64::min(tmp1, tmp2) > d_ell { return false; }
 
     return true;
 }
