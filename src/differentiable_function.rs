@@ -577,7 +577,7 @@ impl WASPCache2 {
     pub fn new(n: usize, m: usize, alpha: f64, orthonormal_delta_x: bool) -> Self {
         assert!(alpha > 0.0 && alpha < 1.0);
 
-        let curr_d = DMatrix::<f64>::identity(n, n);
+        let curr_d = DMatrix::<f64>::identity(m, n);
         let delta_f_t = DMatrix::<f64>::identity(n, m);
         let delta_x = get_tangent_matrix(n, orthonormal_delta_x);
         let mut c_1 = vec![];
