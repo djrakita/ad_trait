@@ -1,5 +1,5 @@
 use ad_trait::AD;
-use ad_trait::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionTrait, WASP};
+use ad_trait::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionTrait, WASP, WASP2};
 
 struct Test;
 impl<T: AD> DifferentiableFunctionTrait<T> for Test {
@@ -17,7 +17,7 @@ impl<T: AD> DifferentiableFunctionTrait<T> for Test {
 }
 
 fn main() {
-    let w = WASP::new(2, 2, true, 0.3, 0.3);
+    let w = WASP2::new(2, 2, 0.98, true, 0.3, 0.3);
     let res = w.derivative(&[1., 2.], &Test);
     println!("{:?}, {:?}", res, w.num_f_calls());
     let res = w.derivative(&[1., 2.], &Test);

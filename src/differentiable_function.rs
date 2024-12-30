@@ -587,17 +587,17 @@ impl WASPCache2 {
             let delta_x_i = DVector::<f64>::from_column_slice(delta_x.column(i).as_slice());
             let mut w_i = DMatrix::<f64>::zeros(n, n);
             for j in 0..n {
-                let exponent = math_mod(i as i32 - j as i32, n as i32) / (n as i32 - 1);
-                w_i[(j, j)] = alpha * (1.0 - alpha).powf(exponent as f64);
+                let exponent = math_mod(i as i32 - j as i32, n as i32) as f64 / (n as i32 - 1) as f64;
+                w_i[(j, j)] = alpha * (1.0 - alpha).powf(exponent);
             }
             let w_i_2 = &w_i * &w_i;
 
             let a_i = 2.0 * &delta_x * &w_i_2 * &delta_x.transpose();
-            let a_i_inv = a_i.try_inverse().unwrap();
+            let a_i_inv = a_i.clone().try_inverse().unwrap();
 
             let s_i = (delta_x_i.transpose() * &a_i_inv * &delta_x_i)[(0,0)];
             let s_i_inv = 1.0 / s_i;
-            let c_1_mat = &a_i_inv * (DMatrix::<f64>::identity(n, n) - s_i_inv * &delta_x_i * delta_x_i.transpose() * &a_i_inv) * 2.0 * &delta_x;
+            let c_1_mat = &a_i_inv * (DMatrix::<f64>::identity(n, n) - s_i_inv * &delta_x_i * delta_x_i.transpose() * &a_i_inv) * 2.0 * &delta_x * &w_i_2;
             let c_2_mat = s_i_inv * &a_i_inv * delta_x_i;
             c_1.push(c_1_mat);
             c_2.push(c_2_mat);
