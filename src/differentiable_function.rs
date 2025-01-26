@@ -396,6 +396,9 @@ impl WASP {
             d_ell,
         }
     }
+    pub fn reset_cache(&self) {
+        self.cache.write().unwrap().reset();
+    }
     pub fn new_default(n: usize, m: usize) -> Self {
         Self::new(n, m, true, 0.3, 0.3)
     }
@@ -456,6 +459,8 @@ impl DerivativeMethodTrait for WASP {
 
 #[derive(Clone, Debug)]
 pub struct WASPCache {
+    pub n: usize,
+    pub m: usize,
     pub i: usize,
     pub delta_f_t: DMatrix<f64>,
     pub delta_x: DMatrix<f64>,
@@ -483,12 +488,18 @@ impl WASPCache {
         }
 
         return Self {
+            n,
+            m,
             i: 0,
             delta_f_t,
             delta_x,
             c_1,
             c_2,
         }
+    }
+    pub fn reset(&mut self) {
+        self.delta_f_t = DMatrix::<f64>::identity(self.n, self.m);
+        self.i = 0;
     }
 }
 
