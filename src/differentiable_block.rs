@@ -138,6 +138,7 @@ impl<'a, E: DerivativeMethodTrait2, D1: DifferentiableFunctionTrait2<'a, f64>, D
 }
 */
 
+
 #[derive(Clone)]
 pub struct DifferentiableBlock<DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> {
     function_standard: DC::FunctionType<f64>,
