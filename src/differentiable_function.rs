@@ -503,6 +503,7 @@ impl WASPCache {
     }
 }
 
+/*
 #[derive(Clone)]
 pub struct WASP2 {
     cache: Arc<RwLock<WASPCache2>>,
@@ -628,6 +629,7 @@ impl WASPCache2 {
 pub fn math_mod(a: i32, b: i32) -> i32 {
     return ((a % b) + b) % b;
 }
+*/
 
 pub (crate) fn get_tangent_matrix(n: usize, orthogonal: bool) -> DMatrix<f64> {
     let mut rng = thread_rng();
