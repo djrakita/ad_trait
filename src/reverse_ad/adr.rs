@@ -264,6 +264,7 @@ pub struct ComputationGraph {
     nodes: RwLock<Vec<ComputationGraphNode>>
 }
 impl ComputationGraph {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             add_idx: RwLock::new(0),
