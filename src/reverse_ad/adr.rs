@@ -555,7 +555,7 @@ impl GlobalComputationGraph {
         return GlobalComputationGraph(r);
     }
     pub fn num_nodes(&self) -> usize {
-        unsafe { return (*self.0).nodes.read().unwrap().len() }
+        unsafe { return (*self.0).add_idx.read().unwrap().clone() }
     }
 }
 
