@@ -62,7 +62,8 @@ impl adr {
     }
     pub fn get_backwards_mode_grad(&self) -> BackwardsModeGradOutput {
         let nodes = self.computation_graph.nodes.read().unwrap();
-        let l = nodes.len();
+        let add_idx = *self.computation_graph.add_idx.read().unwrap();
+        let l = add_idx;
         let mut adjoints = vec![0.0; l];
         match self.node_idx {
             NodeIdx::Constant => {
@@ -259,22 +260,36 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> Nalge
 
 #[derive(Debug)]
 pub struct ComputationGraph {
+    add_idx: RwLock<usize>,
     nodes: RwLock<Vec<ComputationGraphNode>>
 }
 impl ComputationGraph {
     fn new() -> Self {
         Self {
+            add_idx: RwLock::new(0),
             nodes: RwLock::new(vec![])
         }
     }
-    fn reset(&self) {
-        self.nodes.write().expect("error").clear()
+    #[allow(dead_code)]
+    fn new_preallocated(num_to_preallocate: usize) -> Self {
+        Self {
+            add_idx: RwLock::new(0),
+            nodes: RwLock::new(vec![ComputationGraphNode::default(); num_to_preallocate]),
+        }
     }
+    fn reset(&self) {
+        // self.nodes.write().expect("error").clear()
+        *self.add_idx.write().expect("error") = 0;
+    }
+    #[inline(always)]
     fn spawn_variable(&'static self, value: f64) -> adr {
         let mut nodes = self.nodes.write().expect("error");
-        let node_idx = nodes.len();
+        let mut add_idx = self.add_idx.write().expect("error");
+        let node_idx = *add_idx;
+        let l = nodes.len();
+
         let node = ComputationGraphNode {
-            node_idx: node_idx,
+            node_idx,
             node_type: NodeType::Constant,
             value,
             parent_0: None,
@@ -282,13 +297,25 @@ impl ComputationGraph {
             parent_0_idx: None,
             parent_1_idx: None
         };
-        nodes.push(node);
-        adr {
+
+        if node_idx >= l {
+            nodes.push(node);
+            for _ in 0..100000 { nodes.push(ComputationGraphNode::default()); }
+        } else {
+            nodes[node_idx] = node;
+        }
+
+        let out = adr {
             value,
             node_idx: NodeIdx::Idx(node_idx),
             computation_graph: self
-        }
+        };
+
+        *add_idx += 1;
+
+        out
     }
+    #[inline(always)]
     fn add_node(&'static self, node_type: NodeType, value: f64, parent_0: Option<f64>, parent_1: Option<f64>, parent_0_idx: Option<NodeIdx>, parent_1_idx: Option<NodeIdx>) -> adr {
         if parent_0_idx.is_some() {
             if parent_1_idx.is_some() {
@@ -311,27 +338,47 @@ impl ComputationGraph {
         }
 
         let mut nodes = self.nodes.write().expect("error");
-        let node_idx = nodes.len();
-        nodes.push( ComputationGraphNode {
-            node_idx,
-            node_type,
-            value,
-            parent_0,
-            parent_1,
-            parent_0_idx,
-            parent_1_idx
-        } );
+        let mut add_idx = self.add_idx.write().expect("error");
+        let node_idx = *add_idx;
+        let l = nodes.len();
+        if node_idx >= l {
+            nodes.push( ComputationGraphNode {
+                node_idx,
+                node_type,
+                value,
+                parent_0,
+                parent_1,
+                parent_0_idx,
+                parent_1_idx
+            } );
 
-        adr {
+            for _ in 0..100000 { nodes.push(ComputationGraphNode::default()); }
+        } else {
+            nodes[*add_idx] = ComputationGraphNode {
+                node_idx,
+                node_type,
+                value,
+                parent_0,
+                parent_1,
+                parent_0_idx,
+                parent_1_idx
+            }
+        }
+
+        let out = adr {
             value,
             node_idx: NodeIdx::Idx(node_idx),
             computation_graph: self
-        }
+        };
+
+        *add_idx+=1;
+
+        return out
     }
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct ComputationGraphNode {
     node_idx: usize,
     node_type: NodeType,
@@ -342,8 +389,9 @@ pub struct ComputationGraphNode {
     parent_1_idx: Option<NodeIdx>
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Default)]
 pub enum NodeType {
+    #[default]
     Constant,
     Add,
     Mul,
@@ -502,7 +550,7 @@ impl GlobalComputationGraph {
     }
     #[allow(static_mut_refs)]
     pub fn get() -> GlobalComputationGraph {
-        let computation_graph = unsafe { _GLOBAL_COMPUTATION_GRAPHS.get_or_init(|| ComputationGraph::new()) };
+        let computation_graph = unsafe { _GLOBAL_COMPUTATION_GRAPHS.get_or_init(|| ComputationGraph::new_preallocated(100_000)) };
         let r: *const ComputationGraph = computation_graph;
         return GlobalComputationGraph(r);
     }
