@@ -2,6 +2,7 @@
 // #![feature(const_trait_impl)]
 #![feature(min_specialization)]
 #![feature(portable_simd)]
+#![feature(trivial_bounds)]
 extern crate core;
 
 pub mod differentiable_function;

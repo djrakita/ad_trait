@@ -6,10 +6,8 @@ use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use nalgebra::{Dim, Matrix, RawStorageMut, OPoint, DimName, DefaultAllocator};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
-// use simba::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
-use std::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8};
+use std::simd::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, f32x1, f32x32, f32x64, f64x1, f64x16, f64x32, f64x64};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-// use packed_simd_2::{f32x16, f32x4, f32x8, f32x2, f64x2, f64x4, f64x8, PrimitiveSimdValue, SimdValue};
 use crate::{AD, F64, ADNumMode};
 use crate::forward_ad::ForwardADTrait;
 use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
@@ -40,7 +38,7 @@ macro_rules! make_adf {
             pub fn constant(value: f64) -> Self {
                 Self {
                     value,
-                    tangent: $t::zero()
+                    tangent: $t::splat(0.0)
                 }
             }
             #[inline]
@@ -57,26 +55,23 @@ macro_rules! make_adf {
             }
             #[inline]
             pub fn tangent_as_vec(&self) -> Vec<f64> {
-                let tangent_size = Self::tangent_size();
-                let mut out = vec![];
-                for i in 0..tangent_size {
-                    out.push(self.tangent.extract(i) as f64);
-                }
-                out
+                self.tangent.as_array().to_vec().iter().map(|x| *x as f64).collect()
              }
+
             #[inline(always)]
             fn mul_with_nan_check(a: $v, b: $v) -> $v {
                 return if a.is_nan() && b.is_zero() { 0.0 } else if a.is_zero() && b.is_nan() { 0.0 } else { a * b }
             }
+
             #[inline(always)]
             fn two_vecs_mul_and_add_with_nan_check(vec1: &$t, vec2: &$t, scalar1: $v, scalar2: $v) -> $t {
                 let mut out_vec = vec![];
 
                 for i in 0..$a {
-                    out_vec.push( Self::mul_with_nan_check(vec1.extract(i), scalar1) + Self::mul_with_nan_check(vec2.extract(i), scalar2) );
+                    out_vec.push( Self::mul_with_nan_check(vec1.as_array()[i], scalar1) + Self::mul_with_nan_check(vec2.as_array()[i], scalar2) );
                 }
 
-                $t::from_slice_unaligned(&out_vec)
+                $t::from_slice(&out_vec)
             }
         }
 
@@ -142,7 +137,7 @@ macro_rules! make_adf {
                                     assert_eq!(tangent_as_vec.len(), $s::tangent_size());
                                     // let mut tangent_as_slice = [0.0; N];
                                     // for (i, t) in tangent_as_vec.iter().enumerate() { tangent_as_slice[i] = *t; }
-                                    tangent = Some($t::from_slice_unaligned(&tangent_as_vec));
+                                    tangent = Some($t::from_slice(&tangent_as_vec));
                                 }
                             }
                         }
@@ -162,7 +157,7 @@ macro_rules! make_adf {
             fn constant(constant: f64) -> Self {
                 Self {
                     value: constant,
-                    tangent: $t::zero()
+                    tangent: $t::splat(0.0)
                 }
             }
 
@@ -246,7 +241,8 @@ macro_rules! make_adf {
 
             #[inline]
             fn set_tangent_value(&mut self, idx: usize, value: f64) {
-                self.tangent.replace(idx, value as $v)
+                // self.tangent.as_mut_array(idx, value as $v)
+                self.tangent.as_mut_array()[idx] = value as $v;
             }
         }
 
@@ -399,7 +395,7 @@ macro_rules! make_adf {
             #[inline]
             fn sub(self, rhs: Self) -> Self::Output {
                 let output_value = self.value - rhs.value;
-                let output_tangent = self.tangent + -$t::one()*rhs.tangent;
+                let output_tangent = self.tangent + -$t::splat(1.0)*rhs.tangent;
                 Self {
                     value: output_value,
                     tangent: output_tangent
@@ -462,7 +458,7 @@ macro_rules! make_adf {
             fn neg(self) -> Self::Output {
                 Self {
                     value: -self.value,
-                    tangent: -$t::one()*self.tangent
+                    tangent: -$t::splat(1.0)*self.tangent
                 }
             }
         }
@@ -862,7 +858,7 @@ macro_rules! make_adf {
         }
         */
 
-        impl<D: DimName> Mul<OPoint<$s, D>> for $s where DefaultAllocator: nalgebra::allocator::Allocator<$s, D> {
+        impl<D: DimName> Mul<OPoint<$s, D>> for $s where DefaultAllocator: nalgebra::allocator::Allocator<$s, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
             type Output = OPoint<$s, D>;
 
             fn mul(self, rhs: OPoint<$s, D>) -> Self::Output {
@@ -874,7 +870,7 @@ macro_rules! make_adf {
             }
         }
 
-        impl<D: DimName> Mul<&OPoint<$s, D>> for $s where DefaultAllocator: nalgebra::allocator::Allocator<$s, D> {
+        impl<D: DimName> Mul<&OPoint<$s, D>> for $s where DefaultAllocator: nalgebra::allocator::Allocator<$s, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
             type Output = OPoint<$s, D>;
 
             fn mul(self, rhs: &OPoint<$s, D>) -> Self::Output {
@@ -924,7 +920,7 @@ macro_rules! make_adf {
                     self.tangent
                 } else {
                     // one_vec_mul(&self.tangent, -1.0)
-                    -$t::one()*self.tangent
+                    -$t::splat(1.0)*self.tangent
                 };
 
                 Self {
@@ -945,7 +941,7 @@ macro_rules! make_adf {
             #[inline]
             fn signum(&self) -> Self {
                 let output_value = self.value.signum();
-                let output_tangent = $t::zero();
+                let output_tangent = $t::splat(0.0);
                 Self {
                     value: output_value,
                     tangent: output_tangent
@@ -1142,26 +1138,26 @@ macro_rules! make_adf {
 
             #[inline]
             fn floor(self) -> Self {
-                Self::new(self.value.floor(), $t::zero())
+                Self::new(self.value.floor(), $t::splat(0.0))
             }
 
             #[inline]
             fn ceil(self) -> Self {
-                Self::new(self.value.ceil(), $t::zero())
+                Self::new(self.value.ceil(), $t::splat(0.0))
             }
 
             #[inline]
             fn round(self) -> Self {
-                Self::new(self.value.round(), $t::zero())
+                Self::new(self.value.round(), $t::splat(0.0))
             }
 
             #[inline]
             fn trunc(self) -> Self {
-                Self::new(self.value.trunc(), $t::zero())
+                Self::new(self.value.trunc(), $t::splat(0.0))
             }
 
             #[inline]
-            fn fract(self) -> Self { Self::new(self.value.fract(), $t::one()) }
+            fn fract(self) -> Self { Self::new(self.value.fract(), $t::splat(1.0)) }
 
             #[inline]
             fn mul_add(self, a: Self, b: Self) -> Self { return (self * a) + b; }
@@ -1552,12 +1548,35 @@ macro_rules! make_adf {
                 false
             }
         }
+
+        unsafe impl Dim for $s {
+            fn try_to_usize() -> Option<usize> {
+                unimplemented!()
+            }
+
+            fn value(&self) -> usize {
+                unimplemented!()
+            }
+
+            fn from_usize(_dim: usize) -> Self {
+                unimplemented!()
+            }
+        }
     }
 }
-make_adf!(f32x2, f32, adf_f32x2, 2, AdfVisitorf32x2, "adf_f32x2");
-make_adf!(f32x4, f32, adf_f32x4, 4, AdfVisitorf32x4, "adf_f32x4");
-make_adf!(f32x8, f32, adf_f32x8, 8, AdfVisitorf32x8, "adf_f32x8");
+
+
+make_adf!(f32x1,  f32, adf_f32x1,   1, AdfVisitorf32x1,  "adf_f32x1");
+make_adf!(f32x2,  f32, adf_f32x2,   2, AdfVisitorf32x2,  "adf_f32x2");
+make_adf!(f32x4,  f32, adf_f32x4,   4, AdfVisitorf32x4,  "adf_f32x4");
+make_adf!(f32x8,  f32, adf_f32x8,   8, AdfVisitorf32x8,  "adf_f32x8");
 make_adf!(f32x16, f32, adf_f32x16, 16, AdfVisitorf32x16, "adf_f32x16");
-make_adf!(f64x2, f64, adf_f64x2, 2, AdfVisitorf64x2, "adf_f64x2");
-make_adf!(f64x4, f64, adf_f64x4, 4, AdfVisitorf64x4, "adf_f64x4");
-make_adf!(f64x8, f64, adf_f64x8, 8, AdfVisitorf64x8, "adf_f64x8");
+make_adf!(f32x32, f32, adf_f32x32, 32, AdfVisitorf32x32, "adf_f32x32");
+make_adf!(f32x64, f32, adf_f32x64, 64, AdfVisitorf32x64, "adf_f32x64");
+make_adf!(f64x1,  f64, adf_f64x1,   1, AdfVisitorf64x1,  "adf_f64x1");
+make_adf!(f64x2,  f64, adf_f64x2,   2, AdfVisitorf64x2,  "adf_f64x2");
+make_adf!(f64x4,  f64, adf_f64x4,   4, AdfVisitorf64x4,  "adf_f64x4");
+make_adf!(f64x8,  f64, adf_f64x8,   8, AdfVisitorf64x8,  "adf_f64x8");
+make_adf!(f64x16, f64, adf_f64x16, 16, AdfVisitorf64x16, "adf_f64x16");
+make_adf!(f64x32, f64, adf_f64x32, 32, AdfVisitorf64x32, "adf_f64x32");
+make_adf!(f64x64, f64, adf_f64x64, 64, AdfVisitorf64x64, "adf_f64x64");
