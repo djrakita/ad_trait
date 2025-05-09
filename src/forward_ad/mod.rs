@@ -1,5 +1,5 @@
 pub mod adfn;
-// pub mod adf;
+#[cfg(feature = "nightly")]
 pub mod adf;
 
 pub trait ForwardADTrait {

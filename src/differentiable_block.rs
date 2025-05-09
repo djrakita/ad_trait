@@ -251,7 +251,6 @@ impl<'a, E: DerivativeMethodTrait> DifferentiableBlock2<'a, E> {
     }
 }
 */
-
 /*
 pub trait DifferentiableBlockArgPrepTrait2<'a, DC: DifferentiableFunctionClass, E: DerivativeMethodTrait2> {
     fn prep_args(&self, inputs: &[f64], function_standard_args: &DC::FunctionType<'a, f64>, function_derivative_args: &DC::FunctionType<'a, E::T>);

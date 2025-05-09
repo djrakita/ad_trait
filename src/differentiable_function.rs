@@ -7,8 +7,10 @@ use crate::{AD};
 use crate::forward_ad::adfn::adfn;
 use crate::forward_ad::ForwardADTrait;
 use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
-use crate::simd::f64xn::f64xn;
 use rand::distributions::Distribution;
+
+#[cfg(feature = "nightly")]
+use crate::simd::f64xn::f64xn;
 
 pub trait DifferentiableFunctionClass {
     type FunctionType<T: AD> : DifferentiableFunctionTrait<T>;
@@ -292,18 +294,23 @@ impl<A: AD + ForwardADTrait> DerivativeMethodTrait for ForwardADMulti<A> {
     }
 }
 
+#[cfg(feature = "nightly")]
 pub struct DerivativeMethodClassFiniteDifferencingMulti<const K: usize>;
+#[cfg(feature = "nightly")]
 impl<const K: usize> DerivativeMethodClass for DerivativeMethodClassFiniteDifferencingMulti<K> {
     type DerivativeMethod = FiniteDifferencingMulti2<K>;
 }
 
+#[cfg(feature = "nightly")]
 #[derive(Clone)]
 pub struct FiniteDifferencingMulti2<const K: usize>;
+#[cfg(feature = "nightly")]
 impl<const K: usize> FiniteDifferencingMulti2<K> {
     pub fn new() -> Self {
         Self {}
     }
 }
+#[cfg(feature = "nightly")]
 impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
     type T = f64xn<K>;
 

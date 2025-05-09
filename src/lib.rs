@@ -1,8 +1,8 @@
-// #![feature(generic_associated_types)]
-// #![feature(const_trait_impl)]
-#![feature(min_specialization)]
-#![feature(portable_simd)]
-#![feature(trivial_bounds)]
+
+// #![feature(min_specialization)]
+// #![feature(portable_simd)]
+// #![feature(trivial_bounds)]
+#![cfg_attr(feature = "nightly", feature(trivial_bounds, portable_simd, min_specialization))]
 extern crate core;
 
 pub mod differentiable_function;
