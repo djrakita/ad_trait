@@ -103,7 +103,7 @@
 //!
 //! }
 //! ```
-//! ## Citation
+//! # Citation
 //!
 //! If you use this crate in your research, please cite:
 //!
@@ -115,6 +115,7 @@
 //!   year={2025}
 //! }
 //! ```
+//!
 
 // #![feature(min_specialization)]
 // #![feature(portable_simd)]
