@@ -20,6 +20,8 @@ use ad_trait::differentiable_block::DifferentiableBlock;
 use ad_trait::differentiable_function::{DifferentiableFunc
 use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::reverse_ad::adr::adr;
+                                        
+                                        
 #[derive(Clone)]
 pub struct Test<T: AD> {
     coeff: T
@@ -41,6 +43,8 @@ impl<T: AD> Test<T> {
         Test { coeff: self.coeff.to_other_ad_type::<T2>() 
     }
 }
+    
+    
 fn main() {
     let inputs = vec![1., 2.];
     
