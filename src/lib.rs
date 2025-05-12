@@ -105,6 +105,9 @@
 //! ```
 //! # Citation
 //!
+//! For more information about our work, refer to our paper:
+//! https://arxiv.org/abs/2504.15976
+//!
 //! If you use this crate in your research, please cite:
 //!
 //! ```text

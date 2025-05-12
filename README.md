@@ -14,7 +14,7 @@ computation in Rust.
   to operate almost exactly as a standard f64. For example,
   `ComplexField` traits, meaning it can be used in any `nalg
 # Example
-```
+```rust
 use ad_trait::AD;
 use ad_trait::differentiable_block::DifferentiableBlock;
 use ad_trait::differentiable_function::{DifferentiableFunc
@@ -43,6 +43,7 @@ impl<T: AD> Test<T> {
 }
 fn main() {
     let inputs = vec![1., 2.];
+    
     // Reverse AD ////////////////////////////////////////
     let function_standard = Test { coeff: 2.0 };
     let function_derivative = function_standard.to_other_a
@@ -53,6 +54,7 @@ fn main() {
     println!("  derivative: {}", derivative_res);
     println!("//////////////");
     println!();
+    
     // Forward AD ////////////////////////////////////////
     let function_standard = Test { coeff: 2.0 };
     let function_derivative = function_standard.to_other_a
@@ -63,6 +65,7 @@ fn main() {
     println!("  derivative: {}", derivative_res);
     println!("//////////////");
     println!();
+    
     // Forward AD Multi //////////////////////////////////
     let function_standard = Test { coeff: 2.0 };
     let function_derivative = function_standard.to_other_a
@@ -73,6 +76,7 @@ fn main() {
     println!("  derivative: {}", derivative_res);
     println!("//////////////");
     println!();
+    
     // Finite Differencing ///////////////////////////////
     let function_standard = Test { coeff: 2.0 };
     let function_derivative = function_standard.clone();
@@ -84,9 +88,13 @@ fn main() {
     println!("//////////////");
     println!();
 }
-
 ```
+
 # Citation
+
+For more information about our work, refer to our paper:
+https://arxiv.org/abs/2504.15976
+
 If you use this crate in your research, please cite:
 ```text
 @article{liang2025ad,
