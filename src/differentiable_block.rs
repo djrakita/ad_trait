@@ -1,5 +1,5 @@
 use nalgebra::DMatrix;
-use crate::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionClass, DifferentiableFunctionClassZero, DifferentiableFunctionTrait, DifferentiableFunctionZero};
+use crate::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionTrait};
 
 /*
 pub struct DifferentiableBlock<'a, D: DifferentiableFunctionTrait, E: DerivativeMethodTrait, AP: DifferentiableBlockArgPrepTrait<'a, D, E>> {
@@ -138,7 +138,7 @@ impl<'a, E: DerivativeMethodTrait2, D1: DifferentiableFunctionTrait2<'a, f64>, D
 }
 */
 
-
+/*
 #[derive(Clone)]
 pub struct DifferentiableBlock<DC: DifferentiableFunctionClass, E: DerivativeMethodTrait> {
     function_standard: DC::FunctionType<f64>,
@@ -208,6 +208,67 @@ impl<E: DerivativeMethodTrait> DifferentiableBlockZero<E> {
     pub fn new_zero(derivative_method: E, num_inputs: usize, num_outputs: usize) -> Self {
         Self::new(derivative_method, DifferentiableFunctionZero::new(num_inputs, num_outputs), DifferentiableFunctionZero::new(num_inputs, num_outputs))
     }
+}
+*/
+
+#[derive(Clone)]
+pub struct DifferentiableBlock<F1, F2, E: DerivativeMethodTrait>
+    where F1: DifferentiableFunctionTrait<f64>,
+          F2: DifferentiableFunctionTrait<E::T>
+{
+    function_standard: F1,
+    function_derivative: F2,
+    derivative_method: E
+}
+impl<F1, F2, E: DerivativeMethodTrait> DifferentiableBlock<F1, F2, E>
+    where F1: DifferentiableFunctionTrait<f64>,
+          F2: DifferentiableFunctionTrait<E::T>
+{
+    pub fn new(function_standard: F1, function_derivative: F2, derivative_method: E) -> Self {
+        assert_eq!(F1::NAME, F2::NAME);
+
+        Self {
+            function_standard,
+            function_derivative,
+            derivative_method,
+        }
+    }
+    #[inline(always)]
+    pub fn num_inputs(&self) -> usize {
+        self.function_standard.num_inputs()
+    }
+    #[inline(always)]
+    pub fn num_outputs(&self) -> usize {
+        self.function_standard.num_outputs()
+    }
+    #[inline]
+    pub fn call(&self, inputs: &[f64]) -> Vec<f64> {
+        assert_eq!(inputs.len(), self.num_inputs());
+        let res = self.function_standard.call(inputs, false);
+        assert_eq!(res.len(), self.num_outputs());
+        res
+    }
+    #[inline]
+    pub fn call_ad_values(&self, inputs: &[E::T]) -> Vec<E::T> {
+        self.function_derivative.call(inputs, false)
+    }
+    #[inline]
+    pub fn derivative(&self, inputs: &[f64]) -> (Vec<f64>, DMatrix<f64>) {
+        assert_eq!(inputs.len(), self.num_inputs());
+        let res = self.derivative_method.derivative(inputs, &self.function_derivative);
+        assert_eq!(res.0.len(), self.num_outputs());
+        res
+    }
+
+    /*
+    pub fn new(_function_type: R, function_standard: R::Output<f64>, function_derivative: R::Output<E::T>, derivative_method: E) -> Self {
+        Self {
+            function_standard,
+            function_derivative,
+            derivative_method,
+        }
+    }
+    */
 }
 
 /*

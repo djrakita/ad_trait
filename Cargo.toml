@@ -1,7 +1,12 @@
 [package]
 name = "ad_trait"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
+authors = ["Danny Rakita <daniel.rakita@yale.edu>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/djrakita/ad_trait"
+readme = "README.md"
+keywords = ["autodiff", "differentiation", "derivatives", "AD"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

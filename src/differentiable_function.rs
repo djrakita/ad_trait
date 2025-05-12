@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
-use std::sync::{Arc, RwLock};
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, RwLock};
 use nalgebra::{DMatrix, DVector};
 use rand::{Rng, thread_rng};
 use rand::distributions::Uniform;
@@ -12,19 +13,111 @@ use rand::distributions::Distribution;
 #[cfg(feature = "nightly")]
 use crate::simd::f64xn::f64xn;
 
+pub trait Reparameterize {
+    type SelfType<T2: AD>: DifferentiableFunctionTrait<T2>;
+}
+
+impl<R: Reparameterize> Reparameterize for Rc<R> {
+    type SelfType<T2: AD> = R::SelfType<T2>;
+}
+impl<R: Reparameterize> Reparameterize for Arc<R> {
+    type SelfType<T2: AD> = R::SelfType<T2>;
+}
+impl<R: Reparameterize> Reparameterize for Mutex<R> {
+    type SelfType<T2: AD> = R::SelfType<T2>;
+}
+impl<R: Reparameterize> Reparameterize for RwLock<R> {
+    type SelfType<T2: AD> = R::SelfType<T2>;
+}
+
+/*
 pub trait DifferentiableFunctionClass {
     type FunctionType<T: AD> : DifferentiableFunctionTrait<T>;
 }
 impl DifferentiableFunctionClass for () {
     type FunctionType<T: AD> = ();
 }
+*/
 
 pub trait DifferentiableFunctionTrait<T: AD> {
+    // type FunctionClass: DifferentiableFunctionClass;
+    const NAME: &'static str;
+
     fn call(&self, inputs: &[T], freeze: bool) -> Vec<T>;
     fn num_inputs(&self) -> usize;
     fn num_outputs(&self) -> usize;
 }
+
+pub trait ToOtherADType: Reparameterize {
+    fn to_other_ad_type<T2: AD>(&self) -> <Self as Reparameterize>::SelfType<T2>;
+}
+
+impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> for Rc<F> {
+    const NAME: &'static str = F::NAME;
+
+    fn call(&self, inputs: &[T], freeze: bool) -> Vec<T> {
+        (**self).call(inputs, freeze)
+    }
+
+    fn num_inputs(&self) -> usize {
+        (**self).num_inputs()
+    }
+
+    fn num_outputs(&self) -> usize {
+        (**self).num_outputs()
+    }
+}
+impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> for Arc<F> {
+    const NAME: &'static str = F::NAME;
+
+    fn call(&self, inputs: &[T], freeze: bool) -> Vec<T> {
+        (**self).call(inputs, freeze)
+    }
+
+    fn num_inputs(&self) -> usize {
+        (**self).num_inputs()
+    }
+
+    fn num_outputs(&self) -> usize {
+        (**self).num_outputs()
+    }
+}
+impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> for Mutex<F> {
+    const NAME: &'static str = F::NAME;
+
+    fn call(&self, inputs: &[T], freeze: bool) -> Vec<T> {
+        self.lock().unwrap().call(inputs, freeze)
+    }
+
+    fn num_inputs(&self) -> usize {
+        self.lock().unwrap().num_inputs()
+    }
+
+    fn num_outputs(&self) -> usize {
+        self.lock().unwrap().num_outputs()
+    }
+}
+impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> for RwLock<F> {
+    const NAME: &'static str = F::NAME;
+
+    fn call(&self, inputs: &[T], freeze: bool) -> Vec<T> {
+        self.read().unwrap().call(inputs, freeze)
+    }
+
+    fn num_inputs(&self) -> usize {
+        self.read().unwrap().num_inputs()
+    }
+
+    fn num_outputs(&self) -> usize {
+        self.read().unwrap().num_outputs()
+    }
+
+}
+
+
 impl<T: AD> DifferentiableFunctionTrait<T> for () {
+    const NAME: &'static str = "()";
+
     fn call(&self, _inputs: &[T], _freeze: bool) -> Vec<T> {
         vec![]
     }
@@ -37,12 +130,16 @@ impl<T: AD> DifferentiableFunctionTrait<T> for () {
         0
     }
 }
+impl Reparameterize for () { type SelfType<T2: AD> = (); }
 
+/*
 pub struct DifferentiableFunctionClassZero;
 impl DifferentiableFunctionClass for DifferentiableFunctionClassZero {
     type FunctionType<T: AD> = DifferentiableFunctionZero;
 }
+*/
 
+#[derive(Clone)]
 pub struct DifferentiableFunctionZero {
     num_inputs: usize,
     num_outputs: usize
@@ -53,6 +150,8 @@ impl DifferentiableFunctionZero {
     }
 }
 impl<T: AD> DifferentiableFunctionTrait<T> for DifferentiableFunctionZero {
+    const NAME: &'static str = "DifferentiableFunctionZero";
+
     fn call(&self, _inputs: &[T], _frozen_freeze: bool) -> Vec<T> {
         vec![T::zero(); self.num_outputs]
     }
@@ -65,6 +164,8 @@ impl<T: AD> DifferentiableFunctionTrait<T> for DifferentiableFunctionZero {
         self.num_outputs
     }
 }
+
+impl Reparameterize for DifferentiableFunctionZero { type SelfType<T2: AD> = DifferentiableFunctionZero; }
 
 pub trait DerivativeMethodClass {
     type DerivativeMethod : DerivativeMethodTrait;
@@ -85,6 +186,8 @@ impl DerivativeMethodTrait for () {
         panic!("derivative should not actually be called on ()");
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 pub struct DerivativeMethodClassFiniteDifferencing;
 impl DerivativeMethodClass for DerivativeMethodClassFiniteDifferencing {
