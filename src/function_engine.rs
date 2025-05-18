@@ -212,7 +212,7 @@ impl<E: DerivativeMethodTrait> DifferentiableBlockZero<E> {
 */
 
 #[derive(Clone)]
-pub struct DifferentiableBlock<F1, F2, E: DerivativeMethodTrait>
+pub struct FunctionEngine<F1, F2, E: DerivativeMethodTrait>
     where F1: DifferentiableFunctionTrait<f64>,
           F2: DifferentiableFunctionTrait<E::T>
 {
@@ -220,7 +220,7 @@ pub struct DifferentiableBlock<F1, F2, E: DerivativeMethodTrait>
     function_derivative: F2,
     derivative_method: E
 }
-impl<F1, F2, E: DerivativeMethodTrait> DifferentiableBlock<F1, F2, E>
+impl<F1, F2, E: DerivativeMethodTrait> FunctionEngine<F1, F2, E>
     where F1: DifferentiableFunctionTrait<f64>,
           F2: DifferentiableFunctionTrait<E::T>
 {
