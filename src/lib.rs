@@ -19,7 +19,7 @@
 //! # Example
 //! ```
 //! use ad_trait::AD;
-//! use ad_trait::function_engine::FunctionEngine;
+//! use ad_trait::differentiable_block::DifferentiableBlock;
 //! use ad_trait::differentiable_function::{DifferentiableFunctionTrait, FiniteDifferencing, ForwardAD, ForwardADMulti, ReverseAD};
 //! use ad_trait::forward_ad::adfn::adfn;
 //! use ad_trait::reverse_ad::adr::adr;
@@ -56,7 +56,7 @@
 //!     // Reverse AD //////////////////////////////////////////////////////////////////////////////////
 //!     let function_standard = Test { coeff: 2.0 };
 //!     let function_derivative = function_standard.to_other_ad_type::<adr>();
-//!     let differentiable_block = FunctionEngine::new(function_standard, function_derivative, ReverseAD::new());
+//!     let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, ReverseAD::new());
 //!
 //!     let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
 //!     println!("Reverse AD: ");
@@ -68,7 +68,7 @@
 //!     // Forward AD //////////////////////////////////////////////////////////////////////////////////
 //!     let function_standard = Test { coeff: 2.0 };
 //!     let function_derivative = function_standard.to_other_ad_type::<adfn<1>>();
-//!     let differentiable_block = FunctionEngine::new(function_standard, function_derivative, ForwardAD::new());
+//!     let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, ForwardAD::new());
 //!
 //!     let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
 //!     println!("Forward AD: ");
@@ -80,7 +80,7 @@
 //!     // Forward AD Multi ////////////////////////////////////////////////////////////////////////////
 //!     let function_standard = Test { coeff: 2.0 };
 //!     let function_derivative = function_standard.to_other_ad_type::<adfn<2>>();
-//!     let differentiable_block = FunctionEngine::new(function_standard, function_derivative, ForwardADMulti::new());
+//!     let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, ForwardADMulti::new());
 //!
 //!     let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
 //!     println!("Forward AD Multi: ");
@@ -92,7 +92,7 @@
 //!     // Finite Differencing /////////////////////////////////////////////////////////////////////////
 //!     let function_standard = Test { coeff: 2.0 };
 //!     let function_derivative = function_standard.clone();
-//!     let differentiable_block = FunctionEngine::new(function_standard, function_derivative, FiniteDifferencing::new());
+//!     let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, FiniteDifferencing::new());
 //!
 //!     let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
 //!     println!("Finite Differencing: ");
@@ -127,7 +127,7 @@
 extern crate core;
 
 pub mod differentiable_function;
-pub mod function_engine;
+pub mod differentiable_block;
 pub mod forward_ad;
 pub mod reverse_ad;
 pub mod simd;
