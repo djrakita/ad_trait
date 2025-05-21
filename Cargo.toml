@@ -1,6 +1,6 @@
 [package]
 name = "ad_trait"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "Easy to use, efficient, and highly flexible automatic differentiation in Rust"
 authors = ["Danny Rakita <daniel.rakita@yale.edu>"]
