@@ -161,6 +161,7 @@ impl<const N: usize> AD for adfn<N> {
     }
 
     fn mul_scalar(arg1: f64, arg2: Self) -> Self {
+        
          Self::constant(arg1) * arg2
     }
 
@@ -255,7 +256,11 @@ fn two_vecs_mul_and_add_with_nan_check<const N: usize>(vec1: &[f64; N], vec2: &[
 }
 #[inline(always)]
 fn mul_with_nan_check(a: f64, b: f64) -> f64 {
-    return if a.is_nan() && b.is_zero() { 0.0 } else if a.is_zero() && b.is_nan() { 0.0 } else { a * b }
+    return if a.is_nan() && b.is_zero() { 0.0 } 
+        else if a.is_zero() && b.is_nan() { 0.0 } 
+        else if a.is_infinite() && b.is_zero() { 0.0 } 
+        else if a.is_zero() && b.is_infinite() { 0.0 } 
+        else { a * b }
 }
 
 #[inline(always)]
@@ -396,7 +401,7 @@ impl<const N: usize> Mul<Self> for adfn<N> {
         #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let output_value = self.value * rhs.value;
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &rhs.tangent, rhs.value, self.value);
+        let output_tangent = two_vecs_mul_and_add_with_nan_check(&self.tangent, &rhs.tangent, rhs.value, self.value);
 
         Self {
             value: output_value,
@@ -859,6 +864,7 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<ad
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: &Matrix<Self, R, C, S>) -> Self::Output {
+        
         let mut out_clone = rhs.clone();
         for e in out_clone.iter_mut() {
             *e *= self;
@@ -1394,7 +1400,7 @@ impl<const N: usize> ComplexField for adfn<N> {
     #[inline]
     fn exp(self) -> Self {
         let output_value = self.value.exp();
-        let output_tangent = one_vec_mul(&self.tangent, output_value);
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, output_value);
         Self {
             value: output_value,
             tangent: output_tangent
