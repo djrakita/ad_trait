@@ -73,6 +73,17 @@ macro_rules! make_adf {
 
                 $t::from_slice(&out_vec)
             }
+
+            #[inline(always)]
+            fn one_vec_mul_with_nan_check(vec: &$t, scalar: $v) -> $t {
+                let mut out_vec = vec![];
+
+                for i in 0..$a {
+                    out_vec.push( Self::mul_with_nan_check(vec.as_array()[i], scalar) );
+                }
+
+                $t::from_slice(&out_vec)
+            }
         }
 
         impl Serialize for $s {
@@ -1309,7 +1320,7 @@ macro_rules! make_adf {
             #[inline]
             fn acosh(self) -> Self {
                 let output_value = self.value.acosh();
-                let d_acosh_d_arg1 =  (1.0/((self.value - 1.0).sqrt()*(self.value + 1.0).sqrt())) as $v;
+                let d_acosh_d_arg1 =  1.0/((self.value * self.value - 1.0).sqrt()) as $v;
                 let output_tangent = $t::splat(d_acosh_d_arg1)*self.tangent;
 
                 Self {
@@ -1362,7 +1373,7 @@ macro_rules! make_adf {
                 let output_value = self.value.sqrt();
                 let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
                 let d_sqrt_d_arg1 =  (1.0/(2.0*tmp.sqrt())) as $v;
-                let output_tangent = $t::splat(d_sqrt_d_arg1)*self.tangent;
+                let output_tangent = $t::one_vec_mul_with_nan_check(&self.tangent, d_sqrt_d_arg1);
 
                 Self {
                     value: output_value,

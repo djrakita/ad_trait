@@ -275,6 +275,15 @@ fn one_vec_mul<const N: usize>(vec: &[f64; N], scalar: f64) -> [f64; N] {
     out
 }
 
+#[inline(always)]
+fn one_vec_mul_with_nan_check<const N: usize>(vec: &[f64; N], scalar: f64) -> [f64; N] {
+    let mut out = [0.0; N];
+    for i in 0..N {
+        out[i] = mul_with_nan_check(scalar, vec[i]);
+    }
+    out
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl<const N: usize> Add<F64> for adfn<N> {
@@ -1197,7 +1206,6 @@ impl<const N: usize> ComplexField for adfn<N> {
         let output_value = self.value.sin();
         let d_sin_d_arg1 = self.value.cos();
         let output_tangent = one_vec_mul(&self.tangent, d_sin_d_arg1);
-
         Self {
             value: output_value,
             tangent: output_tangent
@@ -1226,7 +1234,7 @@ impl<const N: usize> ComplexField for adfn<N> {
         let output_value = self.value.tan();
         let c = self.value.cos();
         let d_tan_d_arg1 =  1.0/(c*c);
-        let output_tangent = one_vec_mul(&self.tangent, d_tan_d_arg1);
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, d_tan_d_arg1);
 
         Self {
             value: output_value,
@@ -1238,7 +1246,7 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn asin(self) -> Self {
         let output_value = self.value.asin();
         let d_asin_d_arg1 =  1.0 / (1.0 - self.value * self.value).sqrt();
-        let output_tangent = one_vec_mul(&self.tangent, d_asin_d_arg1);
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, d_asin_d_arg1);
 
         Self {
             value: output_value,
@@ -1250,7 +1258,7 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn acos(self) -> Self {
         let output_value = self.value.acos();
         let d_acos_d_arg1 =  -1.0 / (1.0 - self.value * self.value).sqrt();
-        let output_tangent = one_vec_mul(&self.tangent, d_acos_d_arg1);
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, d_acos_d_arg1);
 
         Self {
             value: output_value,
@@ -1311,7 +1319,7 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn asinh(self) -> Self {
         let output_value = self.value.asinh();
         let d_asinh_d_arg1 =  1.0/(self.value*self.value + 1.0).sqrt();
-        let output_tangent = one_vec_mul(&self.tangent, d_asinh_d_arg1);
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, d_asinh_d_arg1);
 
         Self {
             value: output_value,
@@ -1322,8 +1330,8 @@ impl<const N: usize> ComplexField for adfn<N> {
     #[inline]
     fn acosh(self) -> Self {
         let output_value = self.value.acosh();
-        let d_acosh_d_arg1 =  1.0/((self.value - 1.0).sqrt()*(self.value + 1.0).sqrt());
-        let output_tangent = one_vec_mul(&self.tangent, d_acosh_d_arg1);
+        let d_acosh_d_arg1 = 1.0 / (self.value * self.value - 1.0).sqrt();
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, d_acosh_d_arg1);
 
         Self {
             value: output_value,
@@ -1335,7 +1343,7 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn atanh(self) -> Self {
         let output_value = self.value.atanh();
         let d_atanh_d_arg1 =  1.0/(1.0 - self.value*self.value);
-        let output_tangent = one_vec_mul(&self.tangent, d_atanh_d_arg1);
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, d_atanh_d_arg1);
 
         Self {
             value: output_value,
@@ -1375,7 +1383,7 @@ impl<const N: usize> ComplexField for adfn<N> {
         let output_value = self.value.sqrt();
         let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
         let d_sqrt_d_arg1 =  1.0/(2.0*tmp.sqrt());
-        let output_tangent = one_vec_mul(&self.tangent, d_sqrt_d_arg1);
+        let output_tangent = one_vec_mul_with_nan_check(&self.tangent, d_sqrt_d_arg1);
 
         Self {
             value: output_value,
@@ -1387,7 +1395,6 @@ impl<const N: usize> ComplexField for adfn<N> {
     fn exp(self) -> Self {
         let output_value = self.value.exp();
         let output_tangent = one_vec_mul(&self.tangent, output_value);
-
         Self {
             value: output_value,
             tangent: output_tangent
@@ -1405,10 +1412,10 @@ impl<const N: usize> ComplexField for adfn<N> {
 
     #[inline]
     fn powf(self, n: Self::RealField) -> Self {
-        let output_value = self.value.powf(n.value);
-        let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0);
+        let output_value = self.value.powf(n.value) as f64;
+        let d_powf_d_arg1 = n.value * self.value.powf(n.value - 1.0) as f64;
         let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
-        let d_powf_d_arg2 = self.value.powf(n.value) * tmp.ln();
+        let d_powf_d_arg2 = (output_value * tmp.ln()) as f64;
         let output_tangent = two_vecs_mul_and_add_with_nan_check(&self.tangent, &n.tangent, d_powf_d_arg1, d_powf_d_arg2);
         return Self {
             value: output_value,

@@ -75,12 +75,17 @@ impl adr {
 
         for node_idx in (0..l).rev() {
             let node = &nodes[node_idx];
+            println!("Backpropagating node idx {} of type {:?} with value {:?}", node_idx, node.node_type, node.value);
             let parent_adjoints = node.node_type.get_derivatives_wrt_parents(node.parent_0, node.parent_1);
+            println!("  Parent adjoints: {:?}", parent_adjoints);
             if parent_adjoints.len() == 1 {
                 let curr_adjoint = adjoints[node_idx];
                 let parent_0_idx = node.parent_0_idx.unwrap();
                 if parent_0_idx != NodeIdx::Constant {
+                    println!("    Updating adjoint for parent_0_idx {}: {}", curr_adjoint, parent_adjoints[0]);
+
                     adjoints[parent_0_idx.get_idx()] += curr_adjoint * parent_adjoints[0];
+                    println!("    Updating adjoint for parent_0_idx {}: {}", curr_adjoint, adjoints[parent_0_idx.get_idx()]);
                 }
             } else if parent_adjoints.len() == 2 {
                 let curr_adjoint = adjoints[node_idx];
@@ -94,6 +99,7 @@ impl adr {
                 }
             }
         }
+        println!("Final adjoints: {:?}", adjoints);
 
         BackwardsModeGradOutput {
             adjoints
@@ -493,7 +499,7 @@ impl NodeType {
             }
             NodeType::Acosh => {
                 let lhs = parent_0.unwrap();
-                tiny_vec!([f64; 2] => 1.0/(ComplexField::sqrt(lhs - 1.0)*ComplexField::sqrt(lhs + 1.0)) )
+                tiny_vec!([f64; 2] => 1.0/(ComplexField::sqrt(lhs*lhs - 1.0)) )
             }
             NodeType::Atanh => {
                 let lhs = parent_0.unwrap();
