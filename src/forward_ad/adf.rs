@@ -1337,7 +1337,7 @@ macro_rules! make_adf {
                 let ln_lhs = self.value.ln();
                 let d_log_d_arg1 = (1.0/(self.value * ln_rhs)) as $v;
                 let d_log_d_arg2 = (-ln_lhs / (base.value * ln_rhs * ln_rhs)) as $v;
-                let output_tangent = $t::splat(d_log_d_arg1)*self.tangent + $t::splat(d_log_d_arg2)*base.tangent ;
+                let output_tangent = $s::two_vecs_mul_and_add_with_nan_check(&self.tangent, &base.tangent, d_log_d_arg1, d_log_d_arg2);
 
                 Self {
                     value: output_value,

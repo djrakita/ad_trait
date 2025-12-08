@@ -1350,7 +1350,7 @@ impl<const N: usize> ComplexField for adfn<N> {
         let ln_lhs = self.value.ln();
         let d_log_d_arg1 = 1.0/(self.value * ln_rhs);
         let d_log_d_arg2 = -ln_lhs / (base.value * ln_rhs * ln_rhs);
-        let output_tangent = two_vecs_mul_and_add(&self.tangent, &base.tangent, d_log_d_arg1, d_log_d_arg2);
+        let output_tangent = two_vecs_mul_and_add_with_nan_check(&self.tangent, &base.tangent, d_log_d_arg1, d_log_d_arg2);
 
         Self {
             value: output_value,
