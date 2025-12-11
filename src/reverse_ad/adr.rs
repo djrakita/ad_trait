@@ -493,7 +493,7 @@ impl NodeType {
             }
             NodeType::Acosh => {
                 let lhs = parent_0.unwrap();
-                tiny_vec!([f64; 2] => 1.0/(ComplexField::sqrt(lhs - 1.0)*ComplexField::sqrt(lhs + 1.0)) )
+                tiny_vec!([f64; 2] => 1.0/(ComplexField::sqrt(lhs*lhs - 1.0)) )
             }
             NodeType::Atanh => {
                 let lhs = parent_0.unwrap();
