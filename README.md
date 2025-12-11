@@ -110,8 +110,8 @@ https://arxiv.org/abs/2504.15976
 If you use this crate in your research, please cite:
 ```text
 @article{liang2025ad,
-  title={ad-trait: A Fast and Flexible Automatic Different
-  author={Liang, Chen and Wang, Qian and Xu, Andy and Raki
+  title={ad-trait: A fast and flexible automatic differentiation library in rust},
+  author={Liang, Chen and Wang, Qian and Xu, Andy and Rakita, Daniel},
   journal={arXiv preprint arXiv:2504.15976},
   year={2025}
 }
