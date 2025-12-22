@@ -1,19 +1,25 @@
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex, RwLock};
-use nalgebra::{DMatrix, DVector};
-use rand::{Rng, thread_rng};
-use rand::distributions::Uniform;
-use crate::{AD};
 use crate::forward_ad::adfn::adfn;
 use crate::forward_ad::ForwardADTrait;
 use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
-use rand::distributions::Distribution;
+use crate::AD;
+use nalgebra::{DMatrix, DVector};
+use rand::distr::Distribution;
+use rand::distr::Uniform;
+use rand::{rng, Rng};
+use std::marker::PhantomData;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, RwLock};
 
 #[cfg(feature = "nightly")]
 use crate::simd::f64xn::f64xn;
 
+/// A trait for types that can be "reparameterized" with a different `AD` type.
+///
+/// This is a critical feature for automatic differentiation, as it allows a function
+/// originally defined for `f64` to be converted into a version that uses `adr` or `adfn`
+/// for derivative tracking.
 pub trait Reparameterize {
+    /// The type of the function after reparameterization with type `T2`.
     type SelfType<T2: AD>: DifferentiableFunctionTrait<T2>;
 }
 
@@ -39,12 +45,26 @@ impl DifferentiableFunctionClass for () {
 }
 */
 
+/// Defines the interface for a function that can be differentiated.
+///
+/// Implementors must provide the `call` method to evaluate the function for a given
+/// `AD` type `T`, and specify the number of inputs and outputs.
 pub trait DifferentiableFunctionTrait<T: AD> {
     // type FunctionClass: DifferentiableFunctionClass;
+    /// A human-readable name for the function.
     const NAME: &'static str;
 
+    /// Evaluates the function.
+    ///
+    /// # Arguments
+    /// * `inputs` - A slice of input values of type `T`.
+    /// * `freeze` - If true, certain caches or state updates might be skipped (used in optimizations).
     fn call(&self, inputs: &[T], freeze: bool) -> Vec<T>;
+
+    /// The number of input variables the function expects.
     fn num_inputs(&self) -> usize;
+
+    /// The number of output variables the function returns.
     fn num_outputs(&self) -> usize;
 }
 
@@ -111,9 +131,7 @@ impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> fo
     fn num_outputs(&self) -> usize {
         self.read().unwrap().num_outputs()
     }
-
 }
-
 
 impl<T: AD> DifferentiableFunctionTrait<T> for () {
     const NAME: &'static str = "()";
@@ -130,7 +148,9 @@ impl<T: AD> DifferentiableFunctionTrait<T> for () {
         0
     }
 }
-impl Reparameterize for () { type SelfType<T2: AD> = (); }
+impl Reparameterize for () {
+    type SelfType<T2: AD> = ();
+}
 
 /*
 pub struct DifferentiableFunctionClassZero;
@@ -142,11 +162,14 @@ impl DifferentiableFunctionClass for DifferentiableFunctionClassZero {
 #[derive(Clone)]
 pub struct DifferentiableFunctionZero {
     num_inputs: usize,
-    num_outputs: usize
+    num_outputs: usize,
 }
 impl DifferentiableFunctionZero {
     pub fn new(num_inputs: usize, num_outputs: usize) -> Self {
-        Self { num_inputs, num_outputs }
+        Self {
+            num_inputs,
+            num_outputs,
+        }
     }
 }
 impl<T: AD> DifferentiableFunctionTrait<T> for DifferentiableFunctionZero {
@@ -165,24 +188,41 @@ impl<T: AD> DifferentiableFunctionTrait<T> for DifferentiableFunctionZero {
     }
 }
 
-impl Reparameterize for DifferentiableFunctionZero { type SelfType<T2: AD> = DifferentiableFunctionZero; }
+impl Reparameterize for DifferentiableFunctionZero {
+    type SelfType<T2: AD> = DifferentiableFunctionZero;
+}
 
 pub trait DerivativeMethodClass {
-    type DerivativeMethod : DerivativeMethodTrait;
+    type DerivativeMethod: DerivativeMethodTrait;
 }
 impl DerivativeMethodClass for () {
     type DerivativeMethod = ();
 }
 
+/// Defines a method for computing the derivative of a `DifferentiableFunctionTrait`.
 pub trait DerivativeMethodTrait: Clone {
+    /// The `AD` type used by this method (e.g., `f64`, `adr`, `adfn`).
     type T: AD;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>);
+    /// Computes the function's value and its Jacobian matrix at the given input point.
+    ///
+    /// # Arguments
+    /// * `inputs` - The input values as `f64`.
+    /// * `function` - The function to differentiate, which must be reparameterizable.
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>);
 }
 impl DerivativeMethodTrait for () {
     type T = f64;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, _inputs: &[f64], _function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        _inputs: &[f64],
+        _function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         panic!("derivative should not actually be called on ()");
     }
 }
@@ -194,8 +234,13 @@ impl DerivativeMethodClass for DerivativeMethodClassFiniteDifferencing {
     type DerivativeMethod = FiniteDifferencing;
 }
 
+/// Computes derivatives using the Finite Differencing method.
+///
+/// This method approximates the Jacobian by evaluating the function at slightly
+/// perturbed points. It's safe and works on any function, but can be numerically
+/// unstable and slow for a large number of inputs.
 #[derive(Clone)]
-pub struct FiniteDifferencing { }
+pub struct FiniteDifferencing {}
 impl FiniteDifferencing {
     pub fn new() -> Self {
         Self {}
@@ -204,7 +249,11 @@ impl FiniteDifferencing {
 impl DerivativeMethodTrait for FiniteDifferencing {
     type T = f64;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = function.num_outputs();
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -234,8 +283,13 @@ impl DerivativeMethodClass for DerivativeMethodClassReverseAD {
     type DerivativeMethod = ReverseAD;
 }
 
+/// Computes derivatives using Reverse-mode Automatic Differentiation.
+///
+/// This method uses a global computation graph to track operations and then
+/// performs a backward pass to compute gradients efficiently. It is ideal
+/// for functions with few outputs and many inputs.
 #[derive(Clone)]
-pub struct ReverseAD { }
+pub struct ReverseAD {}
 impl ReverseAD {
     pub fn new() -> Self {
         Self {}
@@ -244,7 +298,11 @@ impl ReverseAD {
 impl DerivativeMethodTrait for ReverseAD {
     type T = adr;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = function.num_outputs();
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -283,8 +341,12 @@ impl DerivativeMethodClass for DerivativeMethodClassForwardAD {
     type DerivativeMethod = ForwardAD;
 }
 
+/// Computes derivatives using Forward-mode Automatic Differentiation (Single Tangent).
+///
+/// This method propagates a single tangent value alongside each computation.
+/// To compute a full Jacobian, it evaluates the function once per input dimension.
 #[derive(Clone)]
-pub struct ForwardAD { }
+pub struct ForwardAD {}
 impl ForwardAD {
     pub fn new() -> Self {
         Self {}
@@ -293,7 +355,11 @@ impl ForwardAD {
 impl DerivativeMethodTrait for ForwardAD {
     type T = adfn<1>;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = function.num_outputs();
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -312,7 +378,12 @@ impl DerivativeMethodTrait for ForwardAD {
             // let f = D::call(&inputs_ad, args);
             let freeze = if col_idx == 0 { false } else { true };
             let f = function.call(&inputs_ad, freeze);
-            assert_eq!(f.len(), num_outputs, "{}", format!("does not match {}, {}", f.len(), num_outputs));
+            assert_eq!(
+                f.len(),
+                num_outputs,
+                "{}",
+                format!("does not match {}, {}", f.len(), num_outputs)
+            );
             for (row_idx, res) in f.iter().enumerate() {
                 if out_value.len() < num_outputs {
                     out_value.push(res.value);
@@ -334,19 +405,30 @@ impl<A: AD + ForwardADTrait> DerivativeMethodClass for DerivativeMethodClassForw
     type DerivativeMethod = ForwardADMulti<A>;
 }
 
+/// Computes derivatives using Forward-mode Automatic Differentiation (Multi-Tangent).
+///
+/// This method allows for computing multiple columns of the Jacobian in a single pass
+/// by propagating a vector of tangents. This can significantly speed up computation
+/// by taking advantage of SIMD and reducing function overhead.
 #[derive(Clone)]
 pub struct ForwardADMulti<A: AD + ForwardADTrait> {
-    phantom_data: PhantomData<A>
+    phantom_data: PhantomData<A>,
 }
 impl<A: AD + ForwardADTrait> ForwardADMulti<A> {
     pub fn new() -> Self {
-        Self { phantom_data: PhantomData::default() }
+        Self {
+            phantom_data: PhantomData::default(),
+        }
     }
 }
 impl<A: AD + ForwardADTrait> DerivativeMethodTrait for ForwardADMulti<A> {
     type T = A;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = function.num_outputs();
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -364,9 +446,11 @@ impl<A: AD + ForwardADTrait> DerivativeMethodTrait for ForwardADMulti<A> {
             }
 
             'l2: for i in 0..k {
-                if curr_idx + i >= num_inputs { break 'l2; }
+                if curr_idx + i >= num_inputs {
+                    break 'l2;
+                }
                 // inputs_ad[curr_idx+i].tangent[i] = 1.0;
-                inputs_ad[curr_idx+i].set_tangent_value(i, 1.0);
+                inputs_ad[curr_idx + i].set_tangent_value(i, 1.0);
             }
 
             let f = function.call(&inputs_ad, freeze);
@@ -379,21 +463,25 @@ impl<A: AD + ForwardADTrait> DerivativeMethodTrait for ForwardADMulti<A> {
                 }
                 let curr_tangent = res.tangent_as_vec();
                 'l3: for i in 0..k {
-                    if curr_idx + i >= num_inputs { break 'l3; }
+                    if curr_idx + i >= num_inputs {
+                        break 'l3;
+                    }
                     // out_derivative[(row_idx, curr_idx+i)] = res.tangent[i];
                     if curr_tangent[i].is_nan() {
-                        out_derivative[(row_idx, curr_idx+i)] = curr_tangent[i];
+                        out_derivative[(row_idx, curr_idx + i)] = curr_tangent[i];
                     } else {
-                        out_derivative[(row_idx, curr_idx+i)] = curr_tangent[i];
+                        out_derivative[(row_idx, curr_idx + i)] = curr_tangent[i];
                     }
                 }
             }
 
             curr_idx += k;
-            if curr_idx >= num_inputs { break 'l1; }
+            if curr_idx >= num_inputs {
+                break 'l1;
+            }
         }
 
-        return (out_value, out_derivative)
+        return (out_value, out_derivative);
     }
 }
 
@@ -417,7 +505,11 @@ impl<const K: usize> FiniteDifferencingMulti2<K> {
 impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
     type T = f64xn<K>;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let num_inputs = inputs.len();
         let num_outputs = function.num_outputs();
         let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
@@ -436,14 +528,22 @@ impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
 
             if first_loop {
                 'l2: for i in 0..K {
-                    if curr_idx + i >= num_inputs { break 'l2; }
-                    if i+1 >= K { break 'l2; }
+                    if curr_idx + i >= num_inputs {
+                        break 'l2;
+                    }
+                    if i + 1 >= K {
+                        break 'l2;
+                    }
                     inputs_ad[curr_idx + i].value[i + 1] += h;
                 }
             } else {
                 'l2: for i in 0..K {
-                    if curr_idx + i >= num_inputs { break 'l2; }
-                    if i >= K { break 'l2; }
+                    if curr_idx + i >= num_inputs {
+                        break 'l2;
+                    }
+                    if i >= K {
+                        break 'l2;
+                    }
                     inputs_ad[curr_idx + i].value[i] += h;
                 }
             }
@@ -461,22 +561,32 @@ impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
             for (row_idx, res) in f.iter().enumerate() {
                 if first_loop {
                     'l3: for i in 0..K {
-                        if curr_idx + i >= num_inputs { break 'l3; }
-                        if i + 1 >= K { break 'l3; }
-                        out_derivative[(row_idx, curr_idx+i)] = (res.value[i+1] - out_value[row_idx]) / h;
+                        if curr_idx + i >= num_inputs {
+                            break 'l3;
+                        }
+                        if i + 1 >= K {
+                            break 'l3;
+                        }
+                        out_derivative[(row_idx, curr_idx + i)] =
+                            (res.value[i + 1] - out_value[row_idx]) / h;
                     }
                 } else {
                     'l3: for i in 0..K {
-                        if curr_idx + i >= num_inputs { break 'l3; }
-                        if i >= K { break 'l3; }
-                        out_derivative[(row_idx, curr_idx + i)] = (res.value[i] - out_value[row_idx]) / h;
+                        if curr_idx + i >= num_inputs {
+                            break 'l3;
+                        }
+                        if i >= K {
+                            break 'l3;
+                        }
+                        out_derivative[(row_idx, curr_idx + i)] =
+                            (res.value[i] - out_value[row_idx]) / h;
                     }
                 }
             }
 
             if first_loop {
                 first_loop = false;
-                curr_idx += K-1;
+                curr_idx += K - 1;
             } else {
                 curr_idx += K;
             }
@@ -486,7 +596,7 @@ impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
             }
         }
 
-        return (out_value, out_derivative)
+        return (out_value, out_derivative);
     }
 }
 
@@ -495,7 +605,7 @@ pub struct WASP {
     cache: Arc<RwLock<WASPCache>>,
     num_f_calls: Arc<RwLock<usize>>,
     d_theta: f64,
-    d_ell: f64
+    d_ell: f64,
 }
 impl WASP {
     pub fn new(n: usize, m: usize, orthonormal_delta_x: bool, d_theta: f64, d_ell: f64) -> Self {
@@ -513,13 +623,17 @@ impl WASP {
         Self::new(n, m, true, 0.3, 0.3)
     }
     pub fn num_f_calls(&self) -> usize {
-        return self.num_f_calls.read().unwrap().clone()
+        return self.num_f_calls.read().unwrap().clone();
     }
 }
 impl DerivativeMethodTrait for WASP {
     type T = f64;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let mut num_f_calls = 0;
         let f_k = function.call(inputs, false);
         let f_k_dv = DVector::from_column_slice(&f_k);
@@ -536,8 +650,10 @@ impl DerivativeMethodTrait for WASP {
 
             let delta_x_i = cache.delta_x.column(i);
 
-            let x_k_plus_delta_x_i = &x + epsilon*&delta_x_i;
-            let f_k_plus_delta_x_i = DVector::<f64>::from_column_slice(&function.call(x_k_plus_delta_x_i.as_slice(), true));
+            let x_k_plus_delta_x_i = &x + epsilon * &delta_x_i;
+            let f_k_plus_delta_x_i = DVector::<f64>::from_column_slice(
+                &function.call(x_k_plus_delta_x_i.as_slice(), true),
+            );
             num_f_calls += 1;
             let delta_f_i = (&f_k_plus_delta_x_i - &f_k_dv) / epsilon;
             let delta_f_i_hat = cache.delta_f_t.row(i);
@@ -549,14 +665,16 @@ impl DerivativeMethodTrait for WASP {
             let c_2_mat = &cache.c_2[i];
             let delta_f_t = &cache.delta_f_t;
 
-            let d_t_star = c_1_mat*delta_f_t + c_2_mat*delta_f_i.transpose();
+            let d_t_star = c_1_mat * delta_f_t + c_2_mat * delta_f_i.transpose();
             let d_star = d_t_star.transpose();
 
             let tmp = &d_star * &cache.delta_x;
             cache.delta_f_t = tmp.transpose();
 
             let mut new_i = i + 1;
-            if new_i >= n { new_i = 0; }
+            if new_i >= n {
+                new_i = 0;
+            }
             cache.i = new_i;
 
             if return_result {
@@ -575,7 +693,7 @@ pub struct WASPCache {
     pub delta_f_t: DMatrix<f64>,
     pub delta_x: DMatrix<f64>,
     pub c_1: Vec<DMatrix<f64>>,
-    pub c_2: Vec<DVector<f64>>
+    pub c_2: Vec<DVector<f64>>,
 }
 impl WASPCache {
     pub fn new(n: usize, m: usize, orthonormal_delta_x: bool) -> Self {
@@ -589,9 +707,13 @@ impl WASPCache {
 
         for i in 0..n {
             let delta_x_i = DVector::<f64>::from_column_slice(delta_x.column(i).as_slice());
-            let s_i = (delta_x_i.transpose() * &a_inv_mat * &delta_x_i)[(0,0)];
+            let s_i = (delta_x_i.transpose() * &a_inv_mat * &delta_x_i)[(0, 0)];
             let s_i_inv = 1.0 / s_i;
-            let c_1_mat = &a_inv_mat * (DMatrix::<f64>::identity(n, n) - s_i_inv * &delta_x_i * delta_x_i.transpose() * &a_inv_mat) * 2.0 * &delta_x;
+            let c_1_mat = &a_inv_mat
+                * (DMatrix::<f64>::identity(n, n)
+                    - s_i_inv * &delta_x_i * delta_x_i.transpose() * &a_inv_mat)
+                * 2.0
+                * &delta_x;
             let c_2_mat = s_i_inv * &a_inv_mat * delta_x_i;
             c_1.push(c_1_mat);
             c_2.push(c_2_mat);
@@ -605,7 +727,7 @@ impl WASPCache {
             delta_x,
             c_1,
             c_2,
-        }
+        };
     }
     pub fn reset(&mut self) {
         self.delta_f_t = DMatrix::<f64>::identity(self.n, self.m);
@@ -741,9 +863,9 @@ pub fn math_mod(a: i32, b: i32) -> i32 {
 }
 */
 
-pub (crate) fn get_tangent_matrix(n: usize, orthogonal: bool) -> DMatrix<f64> {
-    let mut rng = thread_rng();
-    let uniform = Uniform::new(-1.0, 1.0);
+pub(crate) fn get_tangent_matrix(n: usize, orthogonal: bool) -> DMatrix<f64> {
+    let mut rng = rng();
+    let uniform = Uniform::new(-1.0, 1.0).unwrap();
 
     let t = DMatrix::<f64>::from_fn(n, n, |_, _| uniform.sample(&mut rng));
 
@@ -753,15 +875,17 @@ pub (crate) fn get_tangent_matrix(n: usize, orthogonal: bool) -> DMatrix<f64> {
         delta_x
     } else {
         t
-    }
+    };
 }
 
-pub (crate) fn close_enough(a: &DVector<f64>, b: &DVector<f64>, d_theta: f64, d_ell: f64) -> bool {
+pub(crate) fn close_enough(a: &DVector<f64>, b: &DVector<f64>, d_theta: f64, d_ell: f64) -> bool {
     let a_n = a.norm();
     let b_n = b.norm();
 
-    let tmp = ((a.dot(&b) / ( a_n*b_n )) - 1.0).abs();
-    if tmp > d_theta { return false; }
+    let tmp = ((a.dot(&b) / (a_n * b_n)) - 1.0).abs();
+    if tmp > d_theta {
+        return false;
+    }
 
     let tmp1 = if b_n != 0.0 {
         ((a_n / b_n) - 1.0).abs()
@@ -774,7 +898,9 @@ pub (crate) fn close_enough(a: &DVector<f64>, b: &DVector<f64>, d_theta: f64, d_
         f64::MAX
     };
 
-    if f64::min(tmp1, tmp2) > d_ell { return false; }
+    if f64::min(tmp1, tmp2) > d_ell {
+        return false;
+    }
 
     return true;
 }
@@ -787,11 +913,11 @@ pub fn math_modulus(a: i64, b: i64) -> usize {
 
 pub fn get_tangent_matrix(n: usize, orthonormalize: bool) -> DMatrix<f64> {
     let mut out = DMatrix::zeros(n, n);
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     for i in 0..n {
         for j in 0..n {
-            out[(i, j)] = rng.gen_range(-1.0..=1.0);
+            out[(i, j)] = rng.random_range(-1.0..=1.0);
         }
     }
 
@@ -834,7 +960,7 @@ pub fn wasp_projection2<D: DifferentiableFunctionTrait<f64> + ?Sized>(f: &D, f_x
 pub fn close_enough(d_a_t_mat: &DMatrix<f64>, d_b_t_mat: &DMatrix<f64>, l: usize, m: usize, d_theta: f64) -> bool {
     let mut numbers: Vec<usize> = (0..m).collect();
 
-    let mut rng = thread_rng();
+    let mut rng = rng();
     numbers.shuffle(&mut rng);
 
     let js: Vec<usize> = numbers.into_iter().take(l).collect();
@@ -1155,27 +1281,37 @@ impl DerivativeMethodTrait for WASPEc {
 #[derive(Clone)]
 pub struct SPSA;
 impl SPSA {
-    pub fn new() -> Self { Self {} }
+    pub fn new() -> Self {
+        Self {}
+    }
 }
 impl DerivativeMethodTrait for SPSA {
     type T = f64;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let f0 = function.call(inputs, false);
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let epsilon = 0.00000001;
 
-        let r: Vec<f64> = (0..inputs.len()).into_iter().map(|_x| rng.gen_range(-1.0..=1.0)).collect();
+        let r: Vec<f64> = (0..inputs.len())
+            .into_iter()
+            .map(|_x| rng.random_range(-1.0..=1.0))
+            .collect();
         let x = DVector::from_column_slice(inputs);
         let delta_k = DVector::from_column_slice(&r);
-        let xpos = &x + epsilon*&delta_k;
-        let xneg = &x - epsilon*&delta_k;
+        let xpos = &x + epsilon * &delta_k;
+        let xneg = &x - epsilon * &delta_k;
         let fpos = DVector::from_column_slice(&function.call(xpos.as_slice(), false));
         let fneg = DVector::from_column_slice(&function.call(xneg.as_slice(), false));
         let v = (&fpos - &fneg) / (2.0 * epsilon);
-        let delta_k_inverse = DVector::from_column_slice(&delta_k.iter().map(|x| 1.0 / *x).collect::<Vec<f64>>());
+        let delta_k_inverse =
+            DVector::from_column_slice(&delta_k.iter().map(|x| 1.0 / *x).collect::<Vec<f64>>());
         let out = &v * &delta_k_inverse.transpose();
 
         (f0, out)
@@ -1197,9 +1333,16 @@ impl DerivativeAlwaysZero {
 impl DerivativeMethodTrait for DerivativeAlwaysZero {
     type T = f64;
 
-    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(&self, _inputs: &[f64], function: &D) -> (Vec<f64>, DMatrix<f64>) {
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        _inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
         let num_outputs = function.num_outputs();
         let num_inputs = function.num_inputs();
-        (vec![0.0; num_outputs], DMatrix::from_vec(num_outputs, num_inputs, vec![0.0; num_outputs*num_inputs]))
+        (
+            vec![0.0; num_outputs],
+            DMatrix::from_vec(num_outputs, num_inputs, vec![0.0; num_outputs * num_inputs]),
+        )
     }
 }

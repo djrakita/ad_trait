@@ -1,6 +1,5 @@
-
-use nalgebra::DMatrix;
 use crate::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionTrait};
+use nalgebra::DMatrix;
 
 /*
 pub struct DifferentiableBlock<'a, D: DifferentiableFunctionTrait, E: DerivativeMethodTrait, AP: DifferentiableBlockArgPrepTrait<'a, D, E>> {
@@ -213,18 +212,31 @@ impl<E: DerivativeMethodTrait> DifferentiableBlockZero<E> {
 */
 
 #[derive(Clone)]
+/// A wrapper that combines a differentiable function with a specific derivative method.
+///
+/// `FunctionEngine` simplifies the process of evaluating a function or computing its derivative
+/// by encapsulating both the base function (operating on `f64`) and the derivative-tracking
+/// version of that function (operating on an `AD` type).
 pub struct FunctionEngine<F1, F2, E: DerivativeMethodTrait>
-    where F1: DifferentiableFunctionTrait<f64>,
-          F2: DifferentiableFunctionTrait<E::T>
+where
+    F1: DifferentiableFunctionTrait<f64>,
+    F2: DifferentiableFunctionTrait<E::T>,
 {
     function_standard: F1,
     function_derivative: F2,
-    derivative_method: E
+    derivative_method: E,
 }
 impl<F1, F2, E: DerivativeMethodTrait> FunctionEngine<F1, F2, E>
-    where F1: DifferentiableFunctionTrait<f64>,
-          F2: DifferentiableFunctionTrait<E::T>
+where
+    F1: DifferentiableFunctionTrait<f64>,
+    F2: DifferentiableFunctionTrait<E::T>,
 {
+    /// Creates a new `FunctionEngine`.
+    ///
+    /// # Arguments
+    /// * `function_standard` - The version of the function that operates on `f64`.
+    /// * `function_derivative` - The version of the function that operates on the AD type `E::T`.
+    /// * `derivative_method` - The method to use for computing derivatives (e.g., `ForwardAD`, `ReverseAD`).
     pub fn new(function_standard: F1, function_derivative: F2, derivative_method: E) -> Self {
         assert_eq!(F1::NAME, F2::NAME);
 
@@ -242,6 +254,7 @@ impl<F1, F2, E: DerivativeMethodTrait> FunctionEngine<F1, F2, E>
     pub fn num_outputs(&self) -> usize {
         self.function_standard.num_outputs()
     }
+    /// Evaluates the function at the given input point.
     #[inline]
     pub fn call(&self, inputs: &[f64]) -> Vec<f64> {
         assert_eq!(inputs.len(), self.num_inputs());
@@ -253,10 +266,13 @@ impl<F1, F2, E: DerivativeMethodTrait> FunctionEngine<F1, F2, E>
     pub fn call_ad_values(&self, inputs: &[E::T]) -> Vec<E::T> {
         self.function_derivative.call(inputs, false)
     }
+    /// Computes the function's value and its Jacobian matrix at the given input point.
     #[inline]
     pub fn derivative(&self, inputs: &[f64]) -> (Vec<f64>, DMatrix<f64>) {
         assert_eq!(inputs.len(), self.num_inputs());
-        let res = self.derivative_method.derivative(inputs, &self.function_derivative);
+        let res = self
+            .derivative_method
+            .derivative(inputs, &self.function_derivative);
         assert_eq!(res.0.len(), self.num_outputs());
         res
     }

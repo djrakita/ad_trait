@@ -1,0 +1,18 @@
+# Summary
+
+- [Introduction](intro.md)
+- [Getting Started](getting_started.md)
+- [Core Concepts](concepts.md)
+  - [The AD Trait](ad_trait.md)
+- [Automatic Differentiation Modes](modes/index.md)
+  - [Forward-Mode AD](modes/forward.md)
+  - [Reverse-Mode AD](modes/reverse.md)
+  - [Finite Differencing](modes/finite_differencing.md)
+- [Advanced Topics](advanced/index.md)
+  - [Multi-Tangents](advanced/multi_tangent.md)
+  - [SIMD Acceleration](advanced/simd.md)
+  - [Matrix Operations](advanced/matrix.md)
+- [Integration](integration/index.md)
+  - [nalgebra](integration/nalgebra.md)
+  - [ndarray](integration/ndarray.md)
+- [Examples](examples/index.md)

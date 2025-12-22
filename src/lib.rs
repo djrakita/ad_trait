@@ -1,4 +1,3 @@
-
 //! # Introduction
 //! This crate brings easy to use, efficient, and highly flexible automatic differentiation to the
 //! Rust programming language. Utilizing Rust's extensive and expressive trait features, the several
@@ -106,7 +105,7 @@
 //! # Citation
 //!
 //! For more information about our work, refer to our paper:
-//! https://arxiv.org/abs/2504.15976
+//! <https://arxiv.org/abs/2504.15976>
 //!
 //! If you use this crate in your research, please cite:
 //!
@@ -123,28 +122,41 @@
 // #![feature(min_specialization)]
 // #![feature(portable_simd)]
 // #![feature(trivial_bounds)]
-#![cfg_attr(feature = "nightly", feature(trivial_bounds, portable_simd, min_specialization))]
+#![cfg_attr(
+    feature = "nightly",
+    feature(trivial_bounds, portable_simd, min_specialization)
+)]
 extern crate core;
 
 pub mod differentiable_function;
-pub mod function_engine;
 pub mod forward_ad;
+pub mod function_engine;
 pub mod reverse_ad;
 pub mod simd;
 
-use std::cmp::Ordering;
-use std::fmt::{Debug, Display};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
 use bevy_reflect::Reflect;
 use nalgebra::{Dim, Matrix, RawStorageMut, Scalar};
 use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::Signed;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{DeserializeAs, SerializeAs};
 use simba::scalar::{ComplexField, RealField};
 use simba::simd::{SimdComplexField, SimdRealField};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde::de::DeserializeOwned;
-use serde_with::{DeserializeAs, SerializeAs};
+use std::cmp::Ordering;
+use std::fmt::{Debug, Display};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
 
+/// The core trait for Automatic Differentiation (AD).
+///
+/// This trait defines the interface for types that can participate in automatic differentiation
+/// computations. It combines numerical traits (like `RealField` and `ComplexField` from `simba`)
+/// with AD-specific functionality.
+///
+/// Types implementing `AD` can represent:
+/// -   Standard floating-point values (`f64`, `f32`) for non-derivative computations.
+/// -   Forward-mode AD types (`adfn<K>`) for tangent propagation.
+/// -   Reverse-mode AD types (`adr`) for gradient backpropagation.
 pub trait AD :
     RealField +
     ComplexField +
@@ -183,25 +195,60 @@ pub trait AD :
 
     ScalarOperand
 {
+    /// Creates a constant value of this AD type from an `f64`.
     fn constant(constant: f64) -> Self;
+
+    /// Converts the current AD value back to its base `f64` representation.
+    /// This retrieves the value without its derivative information.
     fn to_constant(&self) -> f64;
+
+    /// Returns the constant version of the current value as a new AD object.
     #[inline(always)]
     fn to_constant_ad(&self) -> Self {
         Self::constant(self.to_constant())
     }
+
+    /// Returns the mode of automatic differentiation used by this type.
     fn ad_num_mode() -> ADNumMode;
+
+    /// Returns the specific numerical type identifier for this AD type.
     fn ad_num_type() -> ADNumType;
+
+    /// Scalar addition between an `f64` and an `AD` value.
     fn add_scalar(arg1: f64, arg2: Self) -> Self;
+
+    /// Scalar subtraction: `arg1 (f64) - arg2 (AD)`.
     fn sub_l_scalar(arg1: f64, arg2: Self) -> Self;
+
+    /// Scalar subtraction: `arg1 (AD) - arg2 (f64)`.
     fn sub_r_scalar(arg1: Self, arg2: f64) -> Self;
+
+    /// Scalar multiplication between an `f64` and an `AD` value.
     fn mul_scalar(arg1: f64, arg2: Self) -> Self;
+
+    /// Scalar division: `arg1 (f64) / arg2 (AD)`.
     fn div_l_scalar(arg1: f64, arg2: Self) -> Self;
+
+    /// Scalar division: `arg1 (AD) / arg2 (f64)`.
     fn div_r_scalar(arg1: Self, arg2: f64) -> Self;
+
+    /// Scalar remainder: `arg1 (f64) % arg2 (AD)`.
     fn rem_l_scalar(arg1: f64, arg2: Self) -> Self;
+
+    /// Scalar remainder: `arg1 (AD) % arg2 (f64)`.
     fn rem_r_scalar(arg1: Self, arg2: f64) -> Self;
+
+    /// Multiplies this scalar by an `nalgebra` matrix of AD values.
     fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S>;
+
+    /// Multiplies this scalar by a reference to an `nalgebra` matrix of AD values.
     fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S>;
+
+    /// Multiplies this scalar by an `ndarray` matrix of AD values.
     fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D>;
+
+    /// Converts this AD value to another AD type.
+    /// This is useful for reparameterizing functions during the differentiation process.
     fn to_other_ad_type<T2: AD>(&self) -> T2 {
         T2::constant(self.to_constant())
     }
@@ -302,27 +349,39 @@ macro_rules! ad_setup {
 }
 ad_setup!(f64, f32);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Categorizes the mode of automatic differentiation used by a type.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ADNumMode {
+    /// Standard floating point computation without differentiation metadata.
     Float,
+    /// Forward-mode automatic differentiation (tangent propagation).
     ForwardAD,
+    /// Reverse-mode automatic differentiation (gradient backpropagation).
     ReverseAD,
-    SIMDNum
+    /// SIMD-accelerated numerical computation.
+    SIMDNum,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Identifies the specific numerical type used in AD computations.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ADNumType {
+    /// Standard 64-bit float.
     F64,
+    /// Standard 32-bit float.
     F32,
+    /// Reverse-mode AD type (`adr`).
     ADR,
+    /// Forward-mode AD type (`adfn`).
     ADFN,
+    /// Alternative forward-mode AD type.
     ADF,
-    F64XN
+    /// SIMD-based 64-bit float vector.
+    F64XN,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-pub trait FloatADTrait: AD { }
+pub trait FloatADTrait: AD {}
 
 impl AD for f64 {
     fn constant(v: f64) -> Self {
@@ -373,23 +432,41 @@ impl AD for f64 {
         arg1 % arg2
     }
 
-    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix<
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &self,
+        other: Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         let mut out = other.clone();
         out.iter_mut().for_each(|x| *x *= *self);
         out
     }
 
-    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix_ref<
+        'a,
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &'a self,
+        other: &'a Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         let mut out = other.clone();
         out.iter_mut().for_each(|x| *x *= *self);
         out
     }
 
-    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(
+        &self,
+        other: &ArrayBase<OwnedRepr<Self>, D>,
+    ) -> ArrayBase<OwnedRepr<Self>, D> {
         other * *self
     }
 }
-impl FloatADTrait for f64 { }
+impl FloatADTrait for f64 {}
 
 impl AD for f32 {
     fn constant(v: f64) -> Self {
@@ -440,23 +517,41 @@ impl AD for f32 {
         arg1 % arg2 as f32
     }
 
-    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix<
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &self,
+        other: Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         let mut out = other.clone();
         out.iter_mut().for_each(|x| *x *= *self);
         out
     }
 
-    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix_ref<
+        'a,
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &'a self,
+        other: &'a Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         let mut out = other.clone();
         out.iter_mut().for_each(|x| *x *= *self);
         out
     }
 
-    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(
+        &self,
+        other: &ArrayBase<OwnedRepr<Self>, D>,
+    ) -> ArrayBase<OwnedRepr<Self>, D> {
         other * *self
     }
 }
-impl FloatADTrait for f32 { }
+impl FloatADTrait for f32 {}
 
 /*
 #[macro_export]
@@ -615,7 +710,7 @@ macro_rules! ad_setup_f64 {
                 *self = *self % rhs;
             }
         }
-    }
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -659,12 +754,18 @@ where
 pub struct SerdeAD<T: AD>(pub T);
 
 impl<T: AD> SerializeAs<T> for SerdeAD<T> {
-    fn serialize_as<S>(source: &T, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize_as<S>(source: &T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         ad_custom_serialize(source, serializer)
     }
 }
 impl<'de, T: AD> DeserializeAs<'de, T> for SerdeAD<T> {
-    fn deserialize_as<D>(deserializer: D) -> Result<T, D::Error> where D: Deserializer<'de> {
+    fn deserialize_as<D>(deserializer: D) -> Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
         ad_custom_deserialize(deserializer)
     }
 }
@@ -672,10 +773,16 @@ impl<'de, T: AD> DeserializeAs<'de, T> for SerdeAD<T> {
 pub trait ADConvertableTrait {
     type ConvertableType<T: AD>;
 
-    fn convert_to_other_ad_type<T1: AD, T2: AD>(input: &Self::ConvertableType<T1>) -> Self::ConvertableType<T2>;
+    fn convert_to_other_ad_type<T1: AD, T2: AD>(
+        input: &Self::ConvertableType<T1>,
+    ) -> Self::ConvertableType<T2>;
 }
 impl ADConvertableTrait for () {
     type ConvertableType<T: AD> = ();
 
-    fn convert_to_other_ad_type<T1: AD, T2: AD>(_input: &Self::ConvertableType<T1>) -> Self::ConvertableType<T2> { () }
+    fn convert_to_other_ad_type<T1: AD, T2: AD>(
+        _input: &Self::ConvertableType<T1>,
+    ) -> Self::ConvertableType<T2> {
+        ()
+    }
 }

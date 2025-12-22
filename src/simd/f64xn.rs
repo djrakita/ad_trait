@@ -1,34 +1,41 @@
+use crate::{ADNumMode, ADNumType, AD, F64};
+use approx::{AbsDiffEq, RelativeEq, UlpsEq};
+use bevy_reflect::Reflect;
+use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
+use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
+use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
+use serde::de::{MapAccess, Visitor};
+use serde::ser::SerializeStruct;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
+use simba::simd::{PrimitiveSimdValue, SimdValue};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use std::ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
-use approx::{AbsDiffEq, RelativeEq, UlpsEq};
-use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
-use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
-use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
-use simba::simd::{PrimitiveSimdValue, SimdValue};
-use crate::{AD, ADNumMode, ADNumType, F64};
-use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
-use serde::de::{MapAccess, Visitor};
-use serde::ser::{SerializeStruct};
-use bevy_reflect::Reflect;
-use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
+use std::ops::{
+    Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Rem, RemAssign, Sub,
+    SubAssign,
+};
 
+/// A SIMD-accelerated numerical type representing a vector of `f64` values.
+///
+/// `f64xn<N>` allows for performing the same operation on `N` floating-point values
+/// simultaneously, which can significantly improve performance for certain types of
+/// numerical computations.
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Copy, Reflect)]
 pub struct f64xn<const N: usize> {
-    pub (crate) value: [f64; N]
+    /// The vector of floating-point values.
+    pub(crate) value: [f64; N],
 }
 impl<const N: usize> f64xn<N> {
+    /// Creates a new `f64xn` from an array of values.
     pub fn new(value: [f64; N]) -> Self {
-        Self {
-            value
-        }
+        Self { value }
     }
+    /// Creates a new `f64xn` where all elements are set to the same value.
     pub fn splat(value: f64) -> Self {
-        Self {
-            value: [value; N]
-        }
+        Self { value: [value; N] }
     }
     #[inline]
     pub fn value(&self) -> [f64; N] {
@@ -49,7 +56,10 @@ impl<const N: usize> IndexMut<usize> for f64xn<N> {
 }
 
 impl<const N: usize> Serialize for f64xn<N> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         let mut state = serializer.serialize_struct("adfn", 2)?;
         let value_as_vec: Vec<f64> = self.value.to_vec();
         state.serialize_field("value", &value_as_vec)?;
@@ -58,11 +68,19 @@ impl<const N: usize> Serialize for f64xn<N> {
 }
 
 impl<'de, const N: usize> Deserialize<'de> for f64xn<N> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, {
-        enum Field { Value }
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        enum Field {
+            Value,
+        }
 
         impl<'de> Deserialize<'de> for Field {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
                 struct FieldVisitor;
 
                 impl<'de> Visitor<'de> for FieldVisitor {
@@ -75,7 +93,7 @@ impl<'de, const N: usize> Deserialize<'de> for f64xn<N> {
                     fn visit_str<E: de::Error>(self, value: &str) -> Result<Field, E> {
                         match value {
                             "value" => Ok(Field::Value),
-                            _ => { Err(de::Error::unknown_field(value, FIELDS)) }
+                            _ => Err(de::Error::unknown_field(value, FIELDS)),
                         }
                     }
                 }
@@ -98,18 +116,22 @@ impl<'de, const N: usize> Deserialize<'de> for f64xn<N> {
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Value => {
-                            if value.is_some() { return Err(de::Error::duplicate_field("value")); }
+                            if value.is_some() {
+                                return Err(de::Error::duplicate_field("value"));
+                            }
                             let value_as_vec = map.next_value::<Vec<f64>>()?;
                             assert_eq!(value_as_vec.len(), N);
                             let mut value_as_slice = [0.0; N];
-                            for (i, t) in value_as_vec.iter().enumerate() { value_as_slice[i] = *t; }
+                            for (i, t) in value_as_vec.iter().enumerate() {
+                                value_as_slice[i] = *t;
+                            }
                             value = Some(value_as_slice);
                         }
                     }
                 }
 
                 let value = value.ok_or_else(|| de::Error::missing_field("value"))?;
-                Ok(f64xn::<N>{ value })
+                Ok(f64xn::<N> { value })
             }
         }
 
@@ -144,11 +166,11 @@ impl<const N: usize> AD for f64xn<N> {
     }
 
     fn sub_r_scalar(arg1: Self, arg2: f64) -> Self {
-        arg1 -  Self::constant(arg2)
+        arg1 - Self::constant(arg2)
     }
 
     fn mul_scalar(arg1: f64, arg2: Self) -> Self {
-         Self::constant(arg1) * arg2
+        Self::constant(arg1) * arg2
     }
 
     fn div_l_scalar(arg1: f64, arg2: Self) -> Self {
@@ -167,20 +189,38 @@ impl<const N: usize> AD for f64xn<N> {
         arg1 % Self::constant(arg2)
     }
 
-    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix<
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &self,
+        other: Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         *self * other
     }
 
-    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix_ref<
+        'a,
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &'a self,
+        other: &'a Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         *self * other
     }
 
-    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(
+        &self,
+        other: &ArrayBase<OwnedRepr<Self>, D>,
+    ) -> ArrayBase<OwnedRepr<Self>, D> {
         other * *self
     }
 }
 
-impl<const N: usize> ScalarOperand for f64xn<N> { }
+impl<const N: usize> ScalarOperand for f64xn<N> {}
 
 impl<const N: usize> Default for f64xn<N> {
     fn default() -> Self {
@@ -275,7 +315,7 @@ impl<const N: usize> Rem<F64> for f64xn<N> {
     }
 }
 
-impl<const N: usize> RemAssign<F64> for  f64xn<N> {
+impl<const N: usize> RemAssign<F64> for f64xn<N> {
     #[inline]
     fn rem_assign(&mut self, rhs: F64) {
         *self = *self % rhs;
@@ -291,11 +331,11 @@ impl<const N: usize> Add<Self> for f64xn<N> {
     fn add(self, rhs: Self) -> Self::Output {
         let mut value = [0.0; N];
 
-        for i in 0..N { value[i] = self[i] + rhs[i]; }
-
-        Self {
-            value
+        for i in 0..N {
+            value[i] = self[i] + rhs[i];
         }
+
+        Self { value }
     }
 }
 impl<const N: usize> AddAssign<Self> for f64xn<N> {
@@ -308,15 +348,15 @@ impl<const N: usize> AddAssign<Self> for f64xn<N> {
 impl<const N: usize> Mul<Self> for f64xn<N> {
     type Output = Self;
 
-        #[inline]
+    #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let mut value = [0.0; N];
 
-        for i in 0..N { value[i] = self[i] * rhs[i]; }
-
-        Self {
-            value
+        for i in 0..N {
+            value[i] = self[i] * rhs[i];
         }
+
+        Self { value }
     }
 }
 impl<const N: usize> MulAssign<Self> for f64xn<N> {
@@ -333,11 +373,11 @@ impl<const N: usize> Sub<Self> for f64xn<N> {
     fn sub(self, rhs: Self) -> Self::Output {
         let mut value = [0.0; N];
 
-        for i in 0..N { value[i] = self[i] - rhs[i]; }
-
-        Self {
-            value
+        for i in 0..N {
+            value[i] = self[i] - rhs[i];
         }
+
+        Self { value }
     }
 }
 impl<const N: usize> SubAssign<Self> for f64xn<N> {
@@ -354,11 +394,11 @@ impl<const N: usize> Div<Self> for f64xn<N> {
     fn div(self, rhs: Self) -> Self::Output {
         let mut value = [0.0; N];
 
-        for i in 0..N { value[i] = self[i] / rhs[i]; }
-
-        Self {
-            value
+        for i in 0..N {
+            value[i] = self[i] / rhs[i];
         }
+
+        Self { value }
     }
 }
 impl<const N: usize> DivAssign<Self> for f64xn<N> {
@@ -392,11 +432,11 @@ impl<const N: usize> Neg for f64xn<N> {
     fn neg(self) -> Self::Output {
         let mut value = [0.0; N];
 
-        for i in 0..N { value[i] = -self[i]; }
-
-        Self {
-            value
+        for i in 0..N {
+            value[i] = -self[i];
         }
+
+        Self { value }
     }
 }
 
@@ -660,7 +700,7 @@ impl<const N: usize> ToPrimitive for f64xn<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize>  PartialEq for f64xn<N> {
+impl<const N: usize> PartialEq for f64xn<N> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         let initial = self.value[0] == other.value[0];
@@ -675,7 +715,7 @@ impl<const N: usize>  PartialEq for f64xn<N> {
     }
 }
 
-impl<const N: usize>  PartialOrd for f64xn<N> {
+impl<const N: usize> PartialOrd for f64xn<N> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let initial = self.value[0].partial_cmp(&other.value[0]);
         if N > 1 {
@@ -689,29 +729,29 @@ impl<const N: usize>  PartialOrd for f64xn<N> {
     }
 }
 
-impl<const N: usize>  Display for f64xn<N> {
+impl<const N: usize> Display for f64xn<N> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         f.write_str(&format!("{:?}", self)).expect("error");
         Ok(())
     }
 }
 
-impl<const N: usize>  From<f64> for f64xn<N> {
+impl<const N: usize> From<f64> for f64xn<N> {
     fn from(value: f64) -> Self {
         Self::splat(value)
     }
 }
-impl<const N: usize>  Into<f64> for f64xn<N> {
+impl<const N: usize> Into<f64> for f64xn<N> {
     fn into(self) -> f64 {
         self.value[0]
     }
 }
-impl<const N: usize>  From<f32> for f64xn<N> {
+impl<const N: usize> From<f32> for f64xn<N> {
     fn from(value: f32) -> Self {
         Self::splat(value as f64)
     }
 }
-impl<const N: usize>  Into<f32> for f64xn<N> {
+impl<const N: usize> Into<f32> for f64xn<N> {
     fn into(self) -> f32 {
         self.value[0] as f32
     }
@@ -719,7 +759,7 @@ impl<const N: usize>  Into<f32> for f64xn<N> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<const N: usize>  UlpsEq for f64xn<N> {
+impl<const N: usize> UlpsEq for f64xn<N> {
     fn default_max_ulps() -> u32 {
         unimplemented!("take the time to figure this out.")
     }
@@ -751,7 +791,12 @@ impl<const N: usize> RelativeEq for f64xn<N> {
         Self::constant(0.000000001)
     }
 
-    fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, _max_relative: Self::Epsilon) -> bool {
+    fn relative_eq(
+        &self,
+        other: &Self,
+        epsilon: Self::Epsilon,
+        _max_relative: Self::Epsilon,
+    ) -> bool {
         let diff = *self - *other;
         if ComplexField::abs(diff) < epsilon {
             true
@@ -799,7 +844,9 @@ impl<const N: usize> SimdValue for f64xn<N> {
     }
 }
 
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64xn<N>, R, C>> Mul<Matrix<f64xn<N>, R, C, S>> for f64xn<N> {
+impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64xn<N>, R, C>>
+    Mul<Matrix<f64xn<N>, R, C, S>> for f64xn<N>
+{
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: Matrix<Self, R, C, S>) -> Self::Output {
@@ -825,7 +872,9 @@ impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f6
 }
 */
 
-impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64xn<N>, R, C>> Mul<&Matrix<f64xn<N>, R, C, S>> for f64xn<N> {
+impl<const N: usize, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64xn<N>, R, C>>
+    Mul<&Matrix<f64xn<N>, R, C, S>> for f64xn<N>
+{
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: &Matrix<Self, R, C, S>) -> Self::Output {
@@ -851,7 +900,11 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
 }
 */
 
-impl<const N: usize, D: DimName> Mul<OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
+impl<const N: usize, D: DimName> Mul<OPoint<f64xn<N>, D>> for f64xn<N>
+where
+    DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D>,
+    DefaultAllocator: nalgebra::allocator::Allocator<D>,
+{
     type Output = OPoint<f64xn<N>, D>;
 
     fn mul(self, rhs: OPoint<f64xn<N>, D>) -> Self::Output {
@@ -863,7 +916,11 @@ impl<const N: usize, D: DimName> Mul<OPoint<f64xn<N>, D>> for f64xn<N> where Def
     }
 }
 
-impl<const N: usize, D: DimName> Mul<&OPoint<f64xn<N>, D>> for f64xn<N> where DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
+impl<const N: usize, D: DimName> Mul<&OPoint<f64xn<N>, D>> for f64xn<N>
+where
+    DefaultAllocator: nalgebra::allocator::Allocator<f64xn<N>, D>,
+    DefaultAllocator: nalgebra::allocator::Allocator<D>,
+{
     type Output = OPoint<f64xn<N>, D>;
 
     fn mul(self, rhs: &OPoint<f64xn<N>, D>) -> Self::Output {
@@ -880,7 +937,7 @@ impl<const N: usize, D: DimName> Mul<&OPoint<f64xn<N>, D>> for f64xn<N> where De
 impl<const N: usize> Zero for f64xn<N> {
     #[inline(always)]
     fn zero() -> Self {
-        return Self::constant(0.0)
+        return Self::constant(0.0);
     }
 
     fn is_zero(&self) -> bool {
@@ -905,16 +962,13 @@ impl<const N: usize> Num for f64xn<N> {
 }
 
 impl<const N: usize> Signed for f64xn<N> {
-
     #[inline]
     fn abs(&self) -> Self {
         let mut value = [0.0; N];
         for i in 0..N {
             value[i] = self.value[i].abs();
         }
-        Self {
-            value
-        }
+        Self { value }
     }
 
     #[inline]
@@ -932,9 +986,7 @@ impl<const N: usize> Signed for f64xn<N> {
         for i in 0..N {
             value[i] = self.value[i].signum();
         }
-        Self {
-            value
-        }
+        Self { value }
     }
 
     fn is_positive(&self) -> bool {
@@ -1090,26 +1142,44 @@ impl<const N: usize> RealField for f64xn<N> {
 impl<const N: usize> ComplexField for f64xn<N> {
     type RealField = Self;
 
-    fn from_real(re: Self::RealField) -> Self { re.clone() }
+    fn from_real(re: Self::RealField) -> Self {
+        re.clone()
+    }
 
-    fn real(self) -> <Self as ComplexField>::RealField { self.clone() }
+    fn real(self) -> <Self as ComplexField>::RealField {
+        self.clone()
+    }
 
-    fn imaginary(self) -> Self::RealField { Self::zero() }
+    fn imaginary(self) -> Self::RealField {
+        Self::zero()
+    }
 
-    fn modulus(self) -> Self::RealField { return ComplexField::abs(self); }
+    fn modulus(self) -> Self::RealField {
+        return ComplexField::abs(self);
+    }
 
-    fn modulus_squared(self) -> Self::RealField { self * self }
+    fn modulus_squared(self) -> Self::RealField {
+        self * self
+    }
 
-    fn argument(self) -> Self::RealField { unimplemented!(); }
+    fn argument(self) -> Self::RealField {
+        unimplemented!();
+    }
 
     #[inline]
-    fn norm1(self) -> Self::RealField { return ComplexField::abs(self); }
+    fn norm1(self) -> Self::RealField {
+        return ComplexField::abs(self);
+    }
 
     #[inline]
-    fn scale(self, factor: Self::RealField) -> Self { return self * factor; }
+    fn scale(self, factor: Self::RealField) -> Self {
+        return self * factor;
+    }
 
     #[inline]
-    fn unscale(self, factor: Self::RealField) -> Self { return self / factor; }
+    fn unscale(self, factor: Self::RealField) -> Self {
+        return self / factor;
+    }
 
     #[inline]
     fn floor(self) -> Self {
@@ -1157,7 +1227,9 @@ impl<const N: usize> ComplexField for f64xn<N> {
     }
 
     #[inline]
-    fn mul_add(self, a: Self, b: Self) -> Self { return (self * a) + b; }
+    fn mul_add(self, a: Self, b: Self) -> Self {
+        return (self * a) + b;
+    }
 
     #[inline]
     fn abs(self) -> Self::RealField {
@@ -1170,10 +1242,14 @@ impl<const N: usize> ComplexField for f64xn<N> {
     }
 
     #[inline]
-    fn recip(self) -> Self { return Self::constant(1.0) / self; }
+    fn recip(self) -> Self {
+        return Self::constant(1.0) / self;
+    }
 
     #[inline]
-    fn conjugate(self) -> Self { return self; }
+    fn conjugate(self) -> Self {
+        return self;
+    }
 
     #[inline]
     fn sin(self) -> Self {
@@ -1298,16 +1374,24 @@ impl<const N: usize> ComplexField for f64xn<N> {
     }
 
     #[inline]
-    fn log2(self) -> Self { return ComplexField::log(self, Self::constant(2.0)); }
+    fn log2(self) -> Self {
+        return ComplexField::log(self, Self::constant(2.0));
+    }
 
     #[inline]
-    fn log10(self) -> Self { return ComplexField::log(self, Self::constant(10.0)); }
+    fn log10(self) -> Self {
+        return ComplexField::log(self, Self::constant(10.0));
+    }
 
     #[inline]
-    fn ln(self) -> Self { return ComplexField::log(self, Self::constant(std::f64::consts::E)); }
+    fn ln(self) -> Self {
+        return ComplexField::log(self, Self::constant(std::f64::consts::E));
+    }
 
     #[inline]
-    fn ln_1p(self) -> Self { ComplexField::ln(Self::constant(1.0) + self) }
+    fn ln_1p(self) -> Self {
+        ComplexField::ln(Self::constant(1.0) + self)
+    }
 
     #[inline]
     fn sqrt(self) -> Self {
@@ -1328,13 +1412,19 @@ impl<const N: usize> ComplexField for f64xn<N> {
     }
 
     #[inline]
-    fn exp2(self) -> Self { ComplexField::powf(Self::constant(2.0), self) }
+    fn exp2(self) -> Self {
+        ComplexField::powf(Self::constant(2.0), self)
+    }
 
     #[inline]
-    fn exp_m1(self) -> Self { return ComplexField::exp(self) - Self::constant(1.0); }
+    fn exp_m1(self) -> Self {
+        return ComplexField::exp(self) - Self::constant(1.0);
+    }
 
     #[inline]
-    fn powi(self, n: i32) -> Self { return ComplexField::powf(self, Self::constant(n as f64)); }
+    fn powi(self, n: i32) -> Self {
+        return ComplexField::powf(self, Self::constant(n as f64));
+    }
 
     #[inline]
     fn powf(self, n: Self::RealField) -> Self {
@@ -1346,10 +1436,14 @@ impl<const N: usize> ComplexField for f64xn<N> {
     }
 
     #[inline]
-    fn powc(self, n: Self) -> Self { return ComplexField::powf(self, n); }
+    fn powc(self, n: Self) -> Self {
+        return ComplexField::powf(self, n);
+    }
 
     #[inline]
-    fn cbrt(self) -> Self { return ComplexField::powf(self, Self::constant(1.0 / 3.0)); }
+    fn cbrt(self) -> Self {
+        return ComplexField::powf(self, Self::constant(1.0 / 3.0));
+    }
 
     fn is_finite(&self) -> bool {
         let initial = self.value[0].is_finite();

@@ -1,39 +1,51 @@
 use once_cell::sync::OnceCell;
 
-use std::sync::{RwLock};
+use std::sync::RwLock;
 
-use std::cmp::Ordering;
-use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
+use crate::{ADNumMode, ADNumType, AD, F64};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use bevy_reflect::Reflect;
 use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
+use serde::de::{MapAccess, Visitor};
+use serde::ser::SerializeStruct;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-use tinyvec::{TinyVec, tiny_vec};
-use crate::{AD, ADNumMode, ADNumType, F64};
-use serde::{Serialize, Deserialize, Serializer, de, Deserializer};
-use serde::de::{MapAccess, Visitor};
-use serde::ser::{SerializeStruct};
+use std::cmp::Ordering;
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
+use std::ops::{
+    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
+};
+use tinyvec::{tiny_vec, TinyVec};
 
+/// A type for Reverse-mode Automatic Differentiation.
+///
+/// `adr` stores its current value and a reference to its position (node index)
+/// in a global computation graph. This allows for computing gradients by rebuilding
+/// the chain of operations and backpropagating adjoints.
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Reflect)]
 #[reflect(from_reflect = false)]
 pub struct adr {
+    /// The primary value.
     value: f64,
+    /// The index of the node representing this value in the computation graph.
     #[reflect(ignore)]
     node_idx: NodeIdx,
+    /// A reference to the global computation graph that tracks operations.
     #[reflect(ignore)]
-    computation_graph: &'static ComputationGraph
+    computation_graph: &'static ComputationGraph,
 }
 impl Debug for adr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("adr { ").expect("error");
-        f.write_str(&format!("value: {:?}, ", self.value())).expect("error");
-        f.write_str(&format!("node_idx: {:?}", self.node_idx)).expect("error");
+        f.write_str(&format!("value: {:?}, ", self.value()))
+            .expect("error");
+        f.write_str(&format!("node_idx: {:?}", self.node_idx))
+            .expect("error");
         f.write_str(" }").expect("error");
 
         Ok(())
@@ -45,8 +57,15 @@ impl Default for adr {
     }
 }
 impl adr {
+    /// Creates a new variable in the global computation graph.
+    ///
+    /// # Arguments
+    /// * `value` - The initial value.
+    /// * `reset_computation_graph` - If true, the global graph will be cleared before adding this variable.
     pub fn new_variable(value: f64, reset_computation_graph: bool) -> Self {
-        if reset_computation_graph { GlobalComputationGraph::get().reset(); }
+        if reset_computation_graph {
+            GlobalComputationGraph::get().reset();
+        }
         GlobalComputationGraph::get().spawn_value(value)
     }
     #[inline]
@@ -56,10 +75,12 @@ impl adr {
     #[inline]
     pub fn is_constant(&self) -> bool {
         match self.node_idx {
-            NodeIdx::Constant => { true }
-            _ => { false }
+            NodeIdx::Constant => true,
+            _ => false,
         }
     }
+    /// Initiates a backward pass from this node to compute gradients (adjoints)
+    /// for all parent nodes in the computation graph.
     pub fn get_backwards_mode_grad(&self) -> BackwardsModeGradOutput {
         let nodes = self.computation_graph.nodes.read().unwrap();
         let add_idx = *self.computation_graph.add_idx.read().unwrap();
@@ -68,14 +89,18 @@ impl adr {
         match self.node_idx {
             NodeIdx::Constant => {
                 //panic!("cannot get backwards mode grad on a constant.")
-                return BackwardsModeGradOutput { adjoints }
+                return BackwardsModeGradOutput { adjoints };
             }
-            NodeIdx::Idx(node_idx) => { adjoints[node_idx] = 1.0; }
+            NodeIdx::Idx(node_idx) => {
+                adjoints[node_idx] = 1.0;
+            }
         }
 
         for node_idx in (0..l).rev() {
             let node = &nodes[node_idx];
-            let parent_adjoints = node.node_type.get_derivatives_wrt_parents(node.parent_0, node.parent_1);
+            let parent_adjoints = node
+                .node_type
+                .get_derivatives_wrt_parents(node.parent_0, node.parent_1);
             if parent_adjoints.len() == 1 {
                 let curr_adjoint = adjoints[node_idx];
                 let parent_0_idx = node.parent_0_idx.unwrap();
@@ -86,23 +111,24 @@ impl adr {
                 let curr_adjoint = adjoints[node_idx];
                 let parent_0_idx = node.parent_0_idx.unwrap();
                 let parent_1_idx = node.parent_1_idx.unwrap();
-                if parent_0_idx != NodeIdx::Constant  {
+                if parent_0_idx != NodeIdx::Constant {
                     adjoints[parent_0_idx.get_idx()] += curr_adjoint * parent_adjoints[0];
                 }
-                if parent_1_idx != NodeIdx::Constant  {
+                if parent_1_idx != NodeIdx::Constant {
                     adjoints[parent_1_idx.get_idx()] += curr_adjoint * parent_adjoints[1];
                 }
             }
         }
 
-        BackwardsModeGradOutput {
-            adjoints
-        }
+        BackwardsModeGradOutput { adjoints }
     }
 }
 
 impl Serialize for adr {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer, {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         let mut state = serializer.serialize_struct("adr", 1)?;
         state.serialize_field("value", &self.value)?;
         state.end()
@@ -110,11 +136,19 @@ impl Serialize for adr {
 }
 
 impl<'de> Deserialize<'de> for adr {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de>, {
-        enum Field { Value }
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        enum Field {
+            Value,
+        }
 
         impl<'de> Deserialize<'de> for Field {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
                 struct FieldVisitor;
 
                 impl<'de> Visitor<'de> for FieldVisitor {
@@ -127,7 +161,7 @@ impl<'de> Deserialize<'de> for adr {
                     fn visit_str<E: de::Error>(self, value: &str) -> Result<Field, E> {
                         match value {
                             "value" => Ok(Field::Value),
-                            _ => { Err(de::Error::unknown_field(value, FIELDS)) }
+                            _ => Err(de::Error::unknown_field(value, FIELDS)),
                         }
                     }
                 }
@@ -150,7 +184,9 @@ impl<'de> Deserialize<'de> for adr {
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Value => {
-                            if value.is_some() { return Err(de::Error::duplicate_field("value")); }
+                            if value.is_some() {
+                                return Err(de::Error::duplicate_field("value"));
+                            }
                             value = Some(map.next_value()?);
                         }
                     }
@@ -168,7 +204,7 @@ impl<'de> Deserialize<'de> for adr {
 
 #[derive(Clone, Debug)]
 pub struct BackwardsModeGradOutput {
-    adjoints: Vec<f64>
+    adjoints: Vec<f64>,
 }
 impl BackwardsModeGradOutput {
     pub fn wrt(&self, v: &adr) -> f64 {
@@ -182,9 +218,9 @@ impl AD for adr {
             adr {
                 value: constant,
                 node_idx: NodeIdx::Constant,
-                computation_graph: &*GlobalComputationGraph::get().0
+                computation_graph: &*GlobalComputationGraph::get().0,
             }
-        }
+        };
     }
 
     fn to_constant(&self) -> f64 {
@@ -208,11 +244,11 @@ impl AD for adr {
     }
 
     fn sub_r_scalar(arg1: Self, arg2: f64) -> Self {
-        arg1 -  Self::constant(arg2)
+        arg1 - Self::constant(arg2)
     }
 
     fn mul_scalar(arg1: f64, arg2: Self) -> Self {
-         Self::constant(arg1) * arg2
+        Self::constant(arg1) * arg2
     }
 
     fn div_l_scalar(arg1: f64, arg2: Self) -> Self {
@@ -231,20 +267,38 @@ impl AD for adr {
         arg1 % Self::constant(arg2)
     }
 
-    fn mul_by_nalgebra_matrix<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&self, other: Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix<
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &self,
+        other: Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         *self * other
     }
 
-    fn mul_by_nalgebra_matrix_ref<'a, R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>>(&'a self, other: &'a Matrix<Self, R, C, S>) -> Matrix<Self, R, C, S> {
+    fn mul_by_nalgebra_matrix_ref<
+        'a,
+        R: Clone + Dim,
+        C: Clone + Dim,
+        S: Clone + RawStorageMut<Self, R, C>,
+    >(
+        &'a self,
+        other: &'a Matrix<Self, R, C, S>,
+    ) -> Matrix<Self, R, C, S> {
         *self * other
     }
 
-    fn mul_by_ndarray_matrix_ref<D: Dimension>(&self, other: &ArrayBase<OwnedRepr<Self>, D>) -> ArrayBase<OwnedRepr<Self>, D> {
+    fn mul_by_ndarray_matrix_ref<D: Dimension>(
+        &self,
+        other: &ArrayBase<OwnedRepr<Self>, D>,
+    ) -> ArrayBase<OwnedRepr<Self>, D> {
         other * *self
     }
 }
 
-impl ScalarOperand for adr { }
+impl ScalarOperand for adr {}
 
 /*
 impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> NalgebraMatMulAD2<R, C, S> for adr {
@@ -261,14 +315,14 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> Nalge
 #[derive(Debug)]
 pub struct ComputationGraph {
     add_idx: RwLock<usize>,
-    nodes: RwLock<Vec<ComputationGraphNode>>
+    nodes: RwLock<Vec<ComputationGraphNode>>,
 }
 impl ComputationGraph {
     #[allow(dead_code)]
     fn new() -> Self {
         Self {
             add_idx: RwLock::new(0),
-            nodes: RwLock::new(vec![])
+            nodes: RwLock::new(vec![]),
         }
     }
     #[allow(dead_code)]
@@ -296,12 +350,14 @@ impl ComputationGraph {
             parent_0: None,
             parent_1: None,
             parent_0_idx: None,
-            parent_1_idx: None
+            parent_1_idx: None,
         };
 
         if node_idx >= l {
             nodes.push(node);
-            for _ in 0..100000 { nodes.push(ComputationGraphNode::default()); }
+            for _ in 0..100000 {
+                nodes.push(ComputationGraphNode::default());
+            }
         } else {
             nodes[node_idx] = node;
         }
@@ -309,7 +365,7 @@ impl ComputationGraph {
         let out = adr {
             value,
             node_idx: NodeIdx::Idx(node_idx),
-            computation_graph: self
+            computation_graph: self,
         };
 
         *add_idx += 1;
@@ -317,23 +373,33 @@ impl ComputationGraph {
         out
     }
     #[inline(always)]
-    fn add_node(&'static self, node_type: NodeType, value: f64, parent_0: Option<f64>, parent_1: Option<f64>, parent_0_idx: Option<NodeIdx>, parent_1_idx: Option<NodeIdx>) -> adr {
+    fn add_node(
+        &'static self,
+        node_type: NodeType,
+        value: f64,
+        parent_0: Option<f64>,
+        parent_1: Option<f64>,
+        parent_0_idx: Option<NodeIdx>,
+        parent_1_idx: Option<NodeIdx>,
+    ) -> adr {
         if parent_0_idx.is_some() {
             if parent_1_idx.is_some() {
-                if parent_0_idx.unwrap() == NodeIdx::Constant && parent_1_idx.unwrap() == NodeIdx::Constant {
+                if parent_0_idx.unwrap() == NodeIdx::Constant
+                    && parent_1_idx.unwrap() == NodeIdx::Constant
+                {
                     return adr {
                         value,
                         node_idx: NodeIdx::Constant,
                         computation_graph: self,
-                    }
+                    };
                 }
             } else {
                 if parent_0_idx.unwrap() == NodeIdx::Constant {
                     return adr {
                         value,
                         node_idx: NodeIdx::Constant,
-                        computation_graph: self
-                    }
+                        computation_graph: self,
+                    };
                 }
             }
         }
@@ -343,17 +409,19 @@ impl ComputationGraph {
         let node_idx = *add_idx;
         let l = nodes.len();
         if node_idx >= l {
-            nodes.push( ComputationGraphNode {
+            nodes.push(ComputationGraphNode {
                 node_idx,
                 node_type,
                 value,
                 parent_0,
                 parent_1,
                 parent_0_idx,
-                parent_1_idx
-            } );
+                parent_1_idx,
+            });
 
-            for _ in 0..100000 { nodes.push(ComputationGraphNode::default()); }
+            for _ in 0..100000 {
+                nodes.push(ComputationGraphNode::default());
+            }
         } else {
             nodes[*add_idx] = ComputationGraphNode {
                 node_idx,
@@ -362,19 +430,19 @@ impl ComputationGraph {
                 parent_0,
                 parent_1,
                 parent_0_idx,
-                parent_1_idx
+                parent_1_idx,
             }
         }
 
         let out = adr {
             value,
             node_idx: NodeIdx::Idx(node_idx),
-            computation_graph: self
+            computation_graph: self,
         };
 
-        *add_idx+=1;
+        *add_idx += 1;
 
-        return out
+        return out;
     }
 }
 
@@ -387,7 +455,7 @@ pub struct ComputationGraphNode {
     parent_0: Option<f64>,
     parent_1: Option<f64>,
     parent_0_idx: Option<NodeIdx>,
-    parent_1_idx: Option<NodeIdx>
+    parent_1_idx: Option<NodeIdx>,
 }
 
 #[derive(Clone, Debug, Copy, Default)]
@@ -424,20 +492,40 @@ pub enum NodeType {
     Log,
     Sqrt,
     Exp,
-    Powf
+    Powf,
 }
 impl NodeType {
-    fn get_derivatives_wrt_parents(&self, parent_0: Option<f64>, parent_1: Option<f64>) -> TinyVec<[f64; 2]> {
+    fn get_derivatives_wrt_parents(
+        &self,
+        parent_0: Option<f64>,
+        parent_1: Option<f64>,
+    ) -> TinyVec<[f64; 2]> {
         return match self {
-            NodeType::Constant => { tiny_vec!([f64; 2]) }
-            NodeType::Add => { tiny_vec!([f64; 2] => 1.0, 1.0) }
-            NodeType::Mul => { tiny_vec!([f64; 2] => parent_1.unwrap(), parent_0.unwrap()) }
-            NodeType::Sub => { tiny_vec!([f64; 2] => 1.0, -1.0) }
-            NodeType::Div => { tiny_vec!([f64; 2] => 1.0/parent_1.unwrap(), -parent_0.unwrap()/(parent_1.unwrap()*parent_1.unwrap())) }
-            NodeType::Neg => { tiny_vec!([f64; 2] => -1.0)  }
+            NodeType::Constant => {
+                tiny_vec!([f64; 2])
+            }
+            NodeType::Add => {
+                tiny_vec!([f64; 2] => 1.0, 1.0)
+            }
+            NodeType::Mul => {
+                tiny_vec!([f64; 2] => parent_1.unwrap(), parent_0.unwrap())
+            }
+            NodeType::Sub => {
+                tiny_vec!([f64; 2] => 1.0, -1.0)
+            }
+            NodeType::Div => {
+                tiny_vec!([f64; 2] => 1.0/parent_1.unwrap(), -parent_0.unwrap()/(parent_1.unwrap()*parent_1.unwrap()))
+            }
+            NodeType::Neg => {
+                tiny_vec!([f64; 2] => -1.0)
+            }
             NodeType::Abs => {
                 let val = parent_0.unwrap();
-                if val >= 0.0 { tiny_vec!([f64; 2] => 1.0) } else { tiny_vec!([f64; 2] => -1.0)  }
+                if val >= 0.0 {
+                    tiny_vec!([f64; 2] => 1.0)
+                } else {
+                    tiny_vec!([f64; 2] => -1.0)
+                }
             }
             NodeType::Signum => {
                 tiny_vec!([f64; 2] => 0.0)
@@ -461,13 +549,27 @@ impl NodeType {
                 let rhs = parent_1.unwrap();
                 tiny_vec!([f64; 2] => rhs/(lhs*lhs + rhs*rhs), -lhs/(lhs*lhs + rhs*rhs))
             }
-            NodeType::Floor => { tiny_vec!([f64; 2] => 0.0)  }
-            NodeType::Ceil => { tiny_vec!([f64; 2] => 0.0) }
-            NodeType::Round => { tiny_vec!([f64; 2] => 0.0) }
-            NodeType::Trunc => { tiny_vec!([f64; 2] => 0.0) }
-            NodeType::Fract => { tiny_vec!([f64; 2] => 1.0) }
-            NodeType::Sin => { tiny_vec!([f64; 2] => ComplexField::cos(parent_0.unwrap())) }
-            NodeType::Cos => { tiny_vec!([f64; 2] => ComplexField::sin(-parent_0.unwrap())) }
+            NodeType::Floor => {
+                tiny_vec!([f64; 2] => 0.0)
+            }
+            NodeType::Ceil => {
+                tiny_vec!([f64; 2] => 0.0)
+            }
+            NodeType::Round => {
+                tiny_vec!([f64; 2] => 0.0)
+            }
+            NodeType::Trunc => {
+                tiny_vec!([f64; 2] => 0.0)
+            }
+            NodeType::Fract => {
+                tiny_vec!([f64; 2] => 1.0)
+            }
+            NodeType::Sin => {
+                tiny_vec!([f64; 2] => ComplexField::cos(parent_0.unwrap()))
+            }
+            NodeType::Cos => {
+                tiny_vec!([f64; 2] => ComplexField::sin(-parent_0.unwrap()))
+            }
             NodeType::Tan => {
                 let c = ComplexField::cos(parent_0.unwrap());
                 tiny_vec!([f64; 2] => 1.0 / (c*c))
@@ -481,8 +583,12 @@ impl NodeType {
             NodeType::Atan => {
                 tiny_vec!([f64; 2] => 1.0/(parent_0.unwrap()*parent_0.unwrap() + 1.0))
             }
-            NodeType::Sinh => { tiny_vec!([f64; 2] => ComplexField::cosh(parent_0.unwrap())) }
-            NodeType::Cosh => { tiny_vec!([f64; 2] => ComplexField::sinh(parent_0.unwrap())) }
+            NodeType::Sinh => {
+                tiny_vec!([f64; 2] => ComplexField::cosh(parent_0.unwrap()))
+            }
+            NodeType::Cosh => {
+                tiny_vec!([f64; 2] => ComplexField::sinh(parent_0.unwrap()))
+            }
             NodeType::Tanh => {
                 let c = ComplexField::cosh(parent_0.unwrap());
                 tiny_vec!([f64; 2] => 1.0 / (c*c))
@@ -527,14 +633,16 @@ impl NodeType {
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum NodeIdx {
     Constant,
-    Idx(usize)
+    Idx(usize),
 }
 impl NodeIdx {
     #[inline]
     pub fn get_idx(&self) -> usize {
         match self {
-            NodeIdx::Constant => { panic!("cannot get idx from constant.") }
-            NodeIdx::Idx(idx) => { return *idx }
+            NodeIdx::Constant => {
+                panic!("cannot get idx from constant.")
+            }
+            NodeIdx::Idx(idx) => return *idx,
         }
     }
 }
@@ -551,7 +659,9 @@ impl GlobalComputationGraph {
     }
     #[allow(static_mut_refs)]
     pub fn get() -> GlobalComputationGraph {
-        let computation_graph = unsafe { _GLOBAL_COMPUTATION_GRAPHS.get_or_init(|| ComputationGraph::new_preallocated(100_000)) };
+        let computation_graph = unsafe {
+            _GLOBAL_COMPUTATION_GRAPHS.get_or_init(|| ComputationGraph::new_preallocated(100_000))
+        };
         let r: *const ComputationGraph = computation_graph;
         return GlobalComputationGraph(r);
     }
@@ -650,7 +760,14 @@ impl Add<Self> for adr {
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
         let out_value = self.value() + rhs.value();
-        self.computation_graph.add_node(NodeType::Add, out_value, Some(self.value()), Some(rhs.value()), Some(self.node_idx), Some(rhs.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Add,
+            out_value,
+            Some(self.value()),
+            Some(rhs.value()),
+            Some(self.node_idx),
+            Some(rhs.node_idx),
+        )
     }
 }
 impl AddAssign<Self> for adr {
@@ -663,10 +780,17 @@ impl AddAssign<Self> for adr {
 impl Mul<Self> for adr {
     type Output = Self;
 
-        #[inline]
+    #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         let out_value = self.value() * rhs.value();
-        self.computation_graph.add_node(NodeType::Mul, out_value, Some(self.value()), Some(rhs.value()), Some(self.node_idx), Some(rhs.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Mul,
+            out_value,
+            Some(self.value()),
+            Some(rhs.value()),
+            Some(self.node_idx),
+            Some(rhs.node_idx),
+        )
     }
 }
 impl MulAssign<Self> for adr {
@@ -682,7 +806,14 @@ impl Sub<Self> for adr {
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
         let out_value = self.value() - rhs.value();
-        self.computation_graph.add_node(NodeType::Sub, out_value, Some(self.value()), Some(rhs.value()), Some(self.node_idx), Some(rhs.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Sub,
+            out_value,
+            Some(self.value()),
+            Some(rhs.value()),
+            Some(self.node_idx),
+            Some(rhs.node_idx),
+        )
     }
 }
 impl SubAssign<Self> for adr {
@@ -698,7 +829,14 @@ impl Div<Self> for adr {
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
         let out_value = self.value() / rhs.value();
-        self.computation_graph.add_node(NodeType::Div, out_value, Some(self.value()), Some(rhs.value()), Some(self.node_idx), Some(rhs.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Div,
+            out_value,
+            Some(self.value()),
+            Some(rhs.value()),
+            Some(self.node_idx),
+            Some(rhs.node_idx),
+        )
     }
 }
 impl DivAssign<Self> for adr {
@@ -713,7 +851,7 @@ impl Rem<Self> for adr {
 
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
-        self - ComplexField::floor(self/rhs)*rhs
+        self - ComplexField::floor(self / rhs) * rhs
     }
 }
 impl RemAssign<Self> for adr {
@@ -729,7 +867,14 @@ impl Neg for adr {
     #[inline]
     fn neg(self) -> Self::Output {
         let out_value = self.value().neg();
-        self.computation_graph.add_node(NodeType::Neg, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Neg,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 }
 
@@ -973,10 +1118,14 @@ impl Display for adr {
 }
 
 impl From<f64> for adr {
-    fn from(value: f64) -> Self { GlobalComputationGraph::get().spawn_value(value) }
+    fn from(value: f64) -> Self {
+        GlobalComputationGraph::get().spawn_value(value)
+    }
 }
 impl Into<f64> for adr {
-    fn into(self) -> f64 { self.value() }
+    fn into(self) -> f64 {
+        self.value()
+    }
 }
 impl From<f32> for adr {
     fn from(value: f32) -> Self {
@@ -991,7 +1140,7 @@ impl Into<f32> for adr {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl  UlpsEq for adr {
+impl UlpsEq for adr {
     fn default_max_ulps() -> u32 {
         unimplemented!("take the time to figure this out.")
     }
@@ -1001,7 +1150,7 @@ impl  UlpsEq for adr {
     }
 }
 
-impl  AbsDiffEq for adr {
+impl AbsDiffEq for adr {
     type Epsilon = Self;
 
     fn default_epsilon() -> Self::Epsilon {
@@ -1018,12 +1167,17 @@ impl  AbsDiffEq for adr {
     }
 }
 
-impl  RelativeEq for adr {
+impl RelativeEq for adr {
     fn default_max_relative() -> Self::Epsilon {
         Self::constant(0.000000001)
     }
 
-    fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, _max_relative: Self::Epsilon) -> bool {
+    fn relative_eq(
+        &self,
+        other: &Self,
+        epsilon: Self::Epsilon,
+        _max_relative: Self::Epsilon,
+    ) -> bool {
         let diff = *self - *other;
         if ComplexField::abs(diff.value()) < epsilon.value() {
             true
@@ -1071,7 +1225,9 @@ impl SimdValue for adr {
     }
 }
 
-impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adr, R, C>> Mul<Matrix<adr, R, C, S>> for adr {
+impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adr, R, C>> Mul<Matrix<adr, R, C, S>>
+    for adr
+{
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: Matrix<Self, R, C, S>) -> Self::Output {
@@ -1097,7 +1253,9 @@ impl< R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<M
 }
 */
 
-impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adr, R, C>> Mul<&Matrix<adr, R, C, S>> for adr {
+impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<adr, R, C>> Mul<&Matrix<adr, R, C, S>>
+    for adr
+{
     type Output = Matrix<Self, R, C, S>;
 
     fn mul(self, rhs: &Matrix<Self, R, C, S>) -> Self::Output {
@@ -1123,7 +1281,11 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<f64, R, C>> Mul<&M
 }
 */
 
-impl<D: DimName> Mul<OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
+impl<D: DimName> Mul<OPoint<adr, D>> for adr
+where
+    DefaultAllocator: nalgebra::allocator::Allocator<adr, D>,
+    DefaultAllocator: nalgebra::allocator::Allocator<D>,
+{
     type Output = OPoint<adr, D>;
 
     fn mul(self, rhs: OPoint<adr, D>) -> Self::Output {
@@ -1135,7 +1297,11 @@ impl<D: DimName> Mul<OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::a
     }
 }
 
-impl<D: DimName> Mul<&OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::allocator::Allocator<adr, D>, DefaultAllocator: nalgebra::allocator::Allocator<D> {
+impl<D: DimName> Mul<&OPoint<adr, D>> for adr
+where
+    DefaultAllocator: nalgebra::allocator::Allocator<adr, D>,
+    DefaultAllocator: nalgebra::allocator::Allocator<D>,
+{
     type Output = OPoint<adr, D>;
 
     fn mul(self, rhs: &OPoint<adr, D>) -> Self::Output {
@@ -1152,7 +1318,7 @@ impl<D: DimName> Mul<&OPoint<adr, D>> for adr where DefaultAllocator: nalgebra::
 impl Zero for adr {
     #[inline]
     fn zero() -> Self {
-        return Self::constant(0.0)
+        return Self::constant(0.0);
     }
 
     fn is_zero(&self) -> bool {
@@ -1177,10 +1343,16 @@ impl Num for adr {
 }
 
 impl Signed for adr {
-
     fn abs(&self) -> Self {
         let out_value = self.value().abs();
-        self.computation_graph.add_node(NodeType::Abs, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Abs,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     fn abs_sub(&self, other: &Self) -> Self {
@@ -1193,7 +1365,14 @@ impl Signed for adr {
 
     fn signum(&self) -> Self {
         let out_value = self.value().signum();
-        self.computation_graph.add_node(NodeType::Signum, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Signum,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     fn is_positive(&self) -> bool {
@@ -1247,13 +1426,27 @@ impl RealField for adr {
     #[inline]
     fn max(self, other: Self) -> Self {
         let out_value = self.value().max(other.value());
-        self.computation_graph.add_node(NodeType::Max, out_value, Some(self.value()), Some(other.value()), Some(self.node_idx), Some(other.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Max,
+            out_value,
+            Some(self.value()),
+            Some(other.value()),
+            Some(self.node_idx),
+            Some(other.node_idx),
+        )
     }
 
     #[inline]
     fn min(self, other: Self) -> Self {
         let out_value = self.value().min(other.value());
-        self.computation_graph.add_node(NodeType::Min, out_value, Some(self.value()), Some(other.value()), Some(self.node_idx), Some(other.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Min,
+            out_value,
+            Some(self.value()),
+            Some(other.value()),
+            Some(self.node_idx),
+            Some(other.node_idx),
+        )
     }
 
     #[inline]
@@ -1265,7 +1458,14 @@ impl RealField for adr {
     #[inline]
     fn atan2(self, other: Self) -> Self {
         let out_value = self.value().atan2(other.value());
-        self.computation_graph.add_node(NodeType::Atan2, out_value, Some(self.value()), Some(other.value()), Some(self.node_idx), Some(other.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Atan2,
+            out_value,
+            Some(self.value()),
+            Some(other.value()),
+            Some(self.node_idx),
+            Some(other.node_idx),
+        )
     }
 
     #[inline]
@@ -1357,56 +1557,111 @@ impl RealField for adr {
 impl ComplexField for adr {
     type RealField = Self;
 
-    fn from_real(re: Self::RealField) -> Self { re.clone() }
+    fn from_real(re: Self::RealField) -> Self {
+        re.clone()
+    }
 
-    fn real(self) -> <Self as ComplexField>::RealField { self.clone() }
+    fn real(self) -> <Self as ComplexField>::RealField {
+        self.clone()
+    }
 
-    fn imaginary(self) -> Self::RealField { Self::zero() }
+    fn imaginary(self) -> Self::RealField {
+        Self::zero()
+    }
 
-    fn modulus(self) -> Self::RealField { return ComplexField::abs(self); }
+    fn modulus(self) -> Self::RealField {
+        return ComplexField::abs(self);
+    }
 
-    fn modulus_squared(self) -> Self::RealField { self * self }
+    fn modulus_squared(self) -> Self::RealField {
+        self * self
+    }
 
-    fn argument(self) -> Self::RealField { unimplemented!(); }
+    fn argument(self) -> Self::RealField {
+        unimplemented!();
+    }
 
-    fn norm1(self) -> Self::RealField { return ComplexField::abs(self); }
+    fn norm1(self) -> Self::RealField {
+        return ComplexField::abs(self);
+    }
 
-    fn scale(self, factor: Self::RealField) -> Self { return self * factor; }
+    fn scale(self, factor: Self::RealField) -> Self {
+        return self * factor;
+    }
 
-    fn unscale(self, factor: Self::RealField) -> Self { return self / factor; }
+    fn unscale(self, factor: Self::RealField) -> Self {
+        return self / factor;
+    }
 
     #[inline]
     fn floor(self) -> Self {
         let out_value = self.value().floor();
-        self.computation_graph.add_node(NodeType::Floor, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Floor,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn ceil(self) -> Self {
         let out_value = self.value().ceil();
-        self.computation_graph.add_node(NodeType::Ceil, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Ceil,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn round(self) -> Self {
         let out_value = self.value().round();
-        self.computation_graph.add_node(NodeType::Round, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Round,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn trunc(self) -> Self {
         let out_value = self.value().trunc();
-        self.computation_graph.add_node(NodeType::Trunc, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Trunc,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn fract(self) -> Self {
         let out_value = self.value().fract();
-        self.computation_graph.add_node(NodeType::Fract, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Fract,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
-    fn mul_add(self, a: Self, b: Self) -> Self { return (self * a) + b; }
+    fn mul_add(self, a: Self, b: Self) -> Self {
+        return (self * a) + b;
+    }
 
     #[inline]
     fn abs(self) -> Self::RealField {
@@ -1419,21 +1674,39 @@ impl ComplexField for adr {
     }
 
     #[inline]
-    fn recip(self) -> Self { return Self::constant(1.0) / self; }
+    fn recip(self) -> Self {
+        return Self::constant(1.0) / self;
+    }
 
     #[inline]
-    fn conjugate(self) -> Self { return self; }
+    fn conjugate(self) -> Self {
+        return self;
+    }
 
     #[inline]
     fn sin(self) -> Self {
         let out_value = self.value().sin();
-        self.computation_graph.add_node(NodeType::Sin, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Sin,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn cos(self) -> Self {
         let out_value = self.value().cos();
-        self.computation_graph.add_node(NodeType::Cos, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Cos,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
@@ -1444,115 +1717,233 @@ impl ComplexField for adr {
     #[inline]
     fn tan(self) -> Self {
         let out_value = self.value().tan();
-        self.computation_graph.add_node(NodeType::Tan, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Tan,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn asin(self) -> Self {
         let out_value = self.value().asin();
-        self.computation_graph.add_node(NodeType::Asin, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Asin,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn acos(self) -> Self {
         let out_value = self.value().acos();
-        self.computation_graph.add_node(NodeType::Acos, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Acos,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn atan(self) -> Self {
         let out_value = self.value().atan();
-        self.computation_graph.add_node(NodeType::Atan, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Atan,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn sinh(self) -> Self {
         let out_value = self.value().sinh();
-        self.computation_graph.add_node(NodeType::Sinh, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Sinh,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn cosh(self) -> Self {
         let out_value = self.value().cosh();
-        self.computation_graph.add_node(NodeType::Cosh, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Cosh,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn tanh(self) -> Self {
         let out_value = self.value().tanh();
-        self.computation_graph.add_node(NodeType::Tanh, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Tanh,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn asinh(self) -> Self {
         let out_value = self.value().asinh();
-        self.computation_graph.add_node(NodeType::Asinh, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Asinh,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn acosh(self) -> Self {
         let out_value = self.value().acosh();
-        self.computation_graph.add_node(NodeType::Acosh, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Acosh,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn atanh(self) -> Self {
         let out_value = self.value().atanh();
-        self.computation_graph.add_node(NodeType::Atanh, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Atanh,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn log(self, base: Self::RealField) -> Self {
         let out_value = self.value().log(base.value());
-        self.computation_graph.add_node(NodeType::Log, out_value, Some(self.value()), Some(base.value()), Some(self.node_idx), Some(base.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Log,
+            out_value,
+            Some(self.value()),
+            Some(base.value()),
+            Some(self.node_idx),
+            Some(base.node_idx),
+        )
     }
 
     #[inline]
-    fn log2(self) -> Self { return ComplexField::log(self, Self::constant(2.0)); }
+    fn log2(self) -> Self {
+        return ComplexField::log(self, Self::constant(2.0));
+    }
 
     #[inline]
-    fn log10(self) -> Self { return ComplexField::log(self, Self::constant(10.0)); }
+    fn log10(self) -> Self {
+        return ComplexField::log(self, Self::constant(10.0));
+    }
 
     #[inline]
-    fn ln(self) -> Self { return ComplexField::log(self, Self::constant(std::f64::consts::E)); }
+    fn ln(self) -> Self {
+        return ComplexField::log(self, Self::constant(std::f64::consts::E));
+    }
 
     #[inline]
-    fn ln_1p(self) -> Self { ComplexField::ln(Self::constant(1.0) + self) }
+    fn ln_1p(self) -> Self {
+        ComplexField::ln(Self::constant(1.0) + self)
+    }
 
     #[inline]
     fn sqrt(self) -> Self {
         let out_value = self.value().sqrt();
-        self.computation_graph.add_node(NodeType::Sqrt, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Sqrt,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
     fn exp(self) -> Self {
         let out_value = self.value().exp();
-        self.computation_graph.add_node(NodeType::Exp, out_value, Some(self.value()), None, Some(self.node_idx), None)
+        self.computation_graph.add_node(
+            NodeType::Exp,
+            out_value,
+            Some(self.value()),
+            None,
+            Some(self.node_idx),
+            None,
+        )
     }
 
     #[inline]
-    fn exp2(self) -> Self { ComplexField::powf(Self::constant(2.0), self) }
+    fn exp2(self) -> Self {
+        ComplexField::powf(Self::constant(2.0), self)
+    }
 
     #[inline]
-    fn exp_m1(self) -> Self { return ComplexField::exp(self) - Self::constant(1.0); }
+    fn exp_m1(self) -> Self {
+        return ComplexField::exp(self) - Self::constant(1.0);
+    }
 
     #[inline]
-    fn powi(self, n: i32) -> Self { return ComplexField::powf(self, Self::constant(n as f64)); }
+    fn powi(self, n: i32) -> Self {
+        return ComplexField::powf(self, Self::constant(n as f64));
+    }
 
     #[inline]
     fn powf(self, n: Self::RealField) -> Self {
         let out_value = self.value().powf(n.value());
-        self.computation_graph.add_node(NodeType::Powf, out_value, Some(self.value()), Some(n.value()), Some(self.node_idx), Some(n.node_idx))
+        self.computation_graph.add_node(
+            NodeType::Powf,
+            out_value,
+            Some(self.value()),
+            Some(n.value()),
+            Some(self.node_idx),
+            Some(n.node_idx),
+        )
     }
 
     #[inline]
-    fn powc(self, n: Self) -> Self { return ComplexField::powf(self, n); }
+    fn powc(self, n: Self) -> Self {
+        return ComplexField::powf(self, n);
+    }
 
     #[inline]
-    fn cbrt(self) -> Self { return ComplexField::powf(self, Self::constant(1.0 / 3.0)); }
+    fn cbrt(self) -> Self {
+        return ComplexField::powf(self, Self::constant(1.0 / 3.0));
+    }
 
-    fn is_finite(&self) -> bool { return self.value().is_finite(); }
+    fn is_finite(&self) -> bool {
+        return self.value().is_finite();
+    }
 
     fn try_sqrt(self) -> Option<Self> {
         Some(ComplexField::sqrt(self))
