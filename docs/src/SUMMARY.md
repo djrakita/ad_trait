@@ -1,6 +1,6 @@
 # Summary
 
-- [Introduction](intro.md)
+- [Introduction](index.md)
 - [Getting Started](getting_started.md)
 - [Core Concepts](concepts.md)
   - [The AD Trait](ad_trait.md)

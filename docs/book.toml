@@ -6,4 +6,4 @@ title = "ad_trait: Automatic Differentiation for Rust"
 
 [output.html]
 git-repository-url = "https://github.com/djrakita/ad_trait"
-edit-url-template = "https://github.com/djrakita/ad_trait/edit/main/docs/{path}"
+edit-url-template = "https://github.com/djrakita/ad_trait/edit/main/docs/src/{path}"
