@@ -3,9 +3,9 @@ use crate::forward_ad::ForwardADTrait;
 use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
 use crate::AD;
 use nalgebra::{DMatrix, DVector};
-use rand::distr::Distribution;
-use rand::distr::Uniform;
-use rand::{rng, Rng};
+use rand::distributions::Distribution;
+use rand::distributions::Uniform;
+use rand::{thread_rng, Rng};
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, RwLock};
@@ -864,8 +864,8 @@ pub fn math_mod(a: i32, b: i32) -> i32 {
 */
 
 pub(crate) fn get_tangent_matrix(n: usize, orthogonal: bool) -> DMatrix<f64> {
-    let mut rng = rng();
-    let uniform = Uniform::new(-1.0, 1.0).unwrap();
+    let mut rng = thread_rng();
+    let uniform = Uniform::new(-1.0, 1.0);
 
     let t = DMatrix::<f64>::from_fn(n, n, |_, _| uniform.sample(&mut rng));
 
@@ -1295,13 +1295,13 @@ impl DerivativeMethodTrait for SPSA {
     ) -> (Vec<f64>, DMatrix<f64>) {
         let f0 = function.call(inputs, false);
 
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
 
         let epsilon = 0.00000001;
 
         let r: Vec<f64> = (0..inputs.len())
             .into_iter()
-            .map(|_x| rng.random_range(-1.0..=1.0))
+            .map(|_x| rng.gen_range(-1.0..=1.0))
             .collect();
         let x = DVector::from_column_slice(inputs);
         let delta_k = DVector::from_column_slice(&r);

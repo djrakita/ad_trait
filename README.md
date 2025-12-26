@@ -1,6 +1,6 @@
 # ad_trait
 
-[![](https://img.shields.io/crates/v/ad_trait.svg)](https://crates.io/crates/ad_trait) [![](https://img.shields.io/badge/docs-book-blue)](https://djrakita.github.io/ad_trait/) [![](https://docs.rs/ad_trait/badge.svg)](https://docs.rs/ad_trait) [![](https://github.com/djrakita/ad_trait/actions/workflows/deploy_book.yml/badge.svg)](https://github.com/djrakita/ad_trait/actions/workflows/deploy_book.yml)
+[![](https://img.shields.io/crates/v/ad_trait.svg)](https://crates.io/crates/ad_trait) [![](https://img.shields.io/badge/docs-book-blue)](https://djrakita.github.io/ad_trait/) [![](https://docs.rs/ad_trait/badge.svg)](https://docs.rs/ad_trait) [![](https://github.com/djrakita/ad_trait/actions/workflows/deploy_book.yml/badge.svg)](https://github.com/djrakita/ad_trait/actions/workflows/deploy_book.yml) [![](https://github.com/djrakita/ad_trait/actions/workflows/rust.yml/badge.svg)](https://github.com/djrakita/ad_trait/actions/workflows/rust.yml)
 
 # Introduction
 This crate brings easy to use, efficient, and highly flexi
