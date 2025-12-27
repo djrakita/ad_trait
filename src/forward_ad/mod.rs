@@ -1,7 +1,8 @@
-pub mod adfn;
 #[cfg(feature = "nightly")]
 pub mod adf;
+pub mod adfn;
 
+use alloc::vec::Vec;
 pub trait ForwardADTrait {
     fn value(&self) -> f64;
     fn tangent_size() -> usize;

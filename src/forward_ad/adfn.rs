@@ -1,7 +1,16 @@
 use crate::forward_ad::ForwardADTrait;
 use crate::{ADNumMode, ADNumType, AD, F64};
+use alloc::format;
+use alloc::vec::Vec;
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
+#[cfg(feature = "bevy")]
 use bevy_reflect::Reflect;
+use core::cmp::Ordering;
+use core::fmt;
+use core::fmt::{Display, Formatter};
+use core::ops::{
+    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
+};
 use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
@@ -10,19 +19,14 @@ use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-use std::cmp::Ordering;
-use std::fmt;
-use std::fmt::{Display, Formatter};
-use std::ops::{
-    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
-};
 
 /// A type for Forward-mode Automatic Differentiation with multi-tangent support.
 ///
 /// `adfn<N>` stores a value and its `N` associated tangents. This allows for computing
 /// up to `N` columns of a Jacobian simultaneously in a single forward pass.
 #[allow(non_camel_case_types)]
-#[derive(Clone, Debug, Copy, Reflect)]
+#[cfg_attr(feature = "bevy", derive(Reflect))]
+#[derive(Clone, Debug, Copy)]
 pub struct adfn<const N: usize> {
     /// The primary value.
     pub(crate) value: f64,
@@ -782,7 +786,7 @@ impl<const N: usize> PartialOrd for adfn<N> {
 }
 
 impl<const N: usize> Display for adfn<N> {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str(&format!("{:?}", self)).expect("error");
         Ok(())
     }
@@ -1157,63 +1161,63 @@ impl<const N: usize> RealField for adfn<N> {
     }
 
     fn pi() -> Self {
-        Self::constant(std::f64::consts::PI)
+        Self::constant(core::f64::consts::PI)
     }
 
     fn two_pi() -> Self {
-        Self::constant(2.0 * std::f64::consts::PI)
+        Self::constant(2.0 * core::f64::consts::PI)
     }
 
     fn frac_pi_2() -> Self {
-        Self::constant(std::f64::consts::FRAC_PI_2)
+        Self::constant(core::f64::consts::FRAC_PI_2)
     }
 
     fn frac_pi_3() -> Self {
-        Self::constant(std::f64::consts::FRAC_PI_3)
+        Self::constant(core::f64::consts::FRAC_PI_3)
     }
 
     fn frac_pi_4() -> Self {
-        Self::constant(std::f64::consts::FRAC_PI_4)
+        Self::constant(core::f64::consts::FRAC_PI_4)
     }
 
     fn frac_pi_6() -> Self {
-        Self::constant(std::f64::consts::FRAC_PI_6)
+        Self::constant(core::f64::consts::FRAC_PI_6)
     }
 
     fn frac_pi_8() -> Self {
-        Self::constant(std::f64::consts::FRAC_PI_8)
+        Self::constant(core::f64::consts::FRAC_PI_8)
     }
 
     fn frac_1_pi() -> Self {
-        Self::constant(std::f64::consts::FRAC_1_PI)
+        Self::constant(core::f64::consts::FRAC_1_PI)
     }
 
     fn frac_2_pi() -> Self {
-        Self::constant(std::f64::consts::FRAC_2_PI)
+        Self::constant(core::f64::consts::FRAC_2_PI)
     }
 
     fn frac_2_sqrt_pi() -> Self {
-        Self::constant(std::f64::consts::FRAC_2_SQRT_PI)
+        Self::constant(core::f64::consts::FRAC_2_SQRT_PI)
     }
 
     fn e() -> Self {
-        Self::constant(std::f64::consts::E)
+        Self::constant(core::f64::consts::E)
     }
 
     fn log2_e() -> Self {
-        Self::constant(std::f64::consts::LOG2_E)
+        Self::constant(core::f64::consts::LOG2_E)
     }
 
     fn log10_e() -> Self {
-        Self::constant(std::f64::consts::LOG10_E)
+        Self::constant(core::f64::consts::LOG10_E)
     }
 
     fn ln_2() -> Self {
-        Self::constant(std::f64::consts::LN_2)
+        Self::constant(core::f64::consts::LN_2)
     }
 
     fn ln_10() -> Self {
-        Self::constant(std::f64::consts::LN_10)
+        Self::constant(core::f64::consts::LN_10)
     }
 }
 
@@ -1492,7 +1496,7 @@ impl<const N: usize> ComplexField for adfn<N> {
 
     #[inline]
     fn ln(self) -> Self {
-        return ComplexField::log(self, Self::constant(std::f64::consts::E));
+        return ComplexField::log(self, Self::constant(core::f64::consts::E));
     }
 
     #[inline]

@@ -122,19 +122,38 @@
 // #![feature(min_specialization)]
 // #![feature(portable_simd)]
 // #![feature(trivial_bounds)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(
     feature = "nightly",
     feature(trivial_bounds, portable_simd, min_specialization)
 )]
-extern crate core;
+
+extern crate alloc;
+#[cfg(any(feature = "std", test))]
+extern crate std;
 
 pub mod differentiable_function;
 pub mod forward_ad;
 pub mod function_engine;
+#[cfg(feature = "std")]
 pub mod reverse_ad;
 pub mod simd;
 
+#[cfg(feature = "bevy")]
 use bevy_reflect::Reflect;
+
+#[cfg(feature = "bevy")]
+pub trait MaybeReflect: Reflect {}
+#[cfg(feature = "bevy")]
+impl<T: Reflect> MaybeReflect for T {}
+
+#[cfg(not(feature = "bevy"))]
+pub trait MaybeReflect {}
+#[cfg(not(feature = "bevy"))]
+impl<T> MaybeReflect for T {}
+use core::cmp::Ordering;
+use core::fmt::{Debug, Display};
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
 use nalgebra::{Dim, Matrix, RawStorageMut, Scalar};
 use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::Signed;
@@ -143,9 +162,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
 use simba::scalar::{ComplexField, RealField};
 use simba::simd::{SimdComplexField, SimdRealField};
-use std::cmp::Ordering;
-use std::fmt::{Debug, Display};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
 
 /// The core trait for Automatic Differentiation (AD).
 ///
@@ -191,7 +207,7 @@ pub trait AD :
     Serialize +
     DeserializeOwned +
 
-    Reflect +
+    MaybeReflect +
 
     ScalarOperand
 {
@@ -356,6 +372,7 @@ pub enum ADNumMode {
     Float,
     /// Forward-mode automatic differentiation (tangent propagation).
     ForwardAD,
+    #[cfg(feature = "std")]
     /// Reverse-mode automatic differentiation (gradient backpropagation).
     ReverseAD,
     /// SIMD-accelerated numerical computation.
@@ -369,6 +386,7 @@ pub enum ADNumType {
     F64,
     /// Standard 32-bit float.
     F32,
+    #[cfg(feature = "std")]
     /// Reverse-mode AD type (`adr`).
     ADR,
     /// Forward-mode AD type (`adfn`).

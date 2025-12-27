@@ -1,10 +1,17 @@
 // use once_cell::sync::OnceCell;
 
+#[cfg(feature = "std")]
 use std::sync::RwLock;
 
 use crate::{ADNumMode, ADNumType, AD, F64};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use bevy_reflect::Reflect;
+use core::cmp::Ordering;
+use core::fmt;
+use core::fmt::{Debug, Display, Formatter};
+use core::ops::{
+    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
+};
 use nalgebra::{DefaultAllocator, Dim, DimName, Matrix, OPoint, RawStorageMut};
 use ndarray::{ArrayBase, Dimension, OwnedRepr, ScalarOperand};
 use num_traits::{Bounded, FromPrimitive, Num, One, Signed, Zero};
@@ -13,13 +20,10 @@ use serde::ser::SerializeStruct;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use simba::scalar::{ComplexField, Field, RealField, SubsetOf};
 use simba::simd::{PrimitiveSimdValue, SimdValue};
-use std::cmp::Ordering;
-use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::{
-    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
-};
 use tinyvec::{tiny_vec, TinyVec};
+
+#[cfg(not(feature = "std"))]
+compile_error!("Reverse AD (adr) currently requires the 'std' feature. Please enable it.");
 
 /// A type for Reverse-mode Automatic Differentiation.
 ///

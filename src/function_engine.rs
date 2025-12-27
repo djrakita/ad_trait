@@ -1,4 +1,5 @@
 use crate::differentiable_function::{DerivativeMethodTrait, DifferentiableFunctionTrait};
+use alloc::vec::Vec;
 use nalgebra::DMatrix;
 
 /*

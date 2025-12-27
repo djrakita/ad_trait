@@ -1,14 +1,24 @@
 use crate::forward_ad::adfn::adfn;
 use crate::forward_ad::ForwardADTrait;
+#[cfg(feature = "std")]
 use crate::reverse_ad::adr::{adr, GlobalComputationGraph};
 use crate::AD;
+use alloc::rc::Rc;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::{format, vec};
+use core::marker::PhantomData;
 use nalgebra::{DMatrix, DVector};
+#[cfg(feature = "std")]
 use rand::distributions::Distribution;
+#[cfg(feature = "std")]
 use rand::distributions::Uniform;
-use rand::{thread_rng, Rng};
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex, RwLock};
+#[cfg(feature = "std")]
+use rand::thread_rng;
+#[cfg(feature = "std")]
+use rand::Rng;
+#[cfg(feature = "std")]
+use std::sync::{Mutex, RwLock};
 
 #[cfg(feature = "nightly")]
 use crate::simd::f64xn::f64xn;
@@ -29,9 +39,11 @@ impl<R: Reparameterize> Reparameterize for Rc<R> {
 impl<R: Reparameterize> Reparameterize for Arc<R> {
     type SelfType<T2: AD> = R::SelfType<T2>;
 }
+#[cfg(feature = "std")]
 impl<R: Reparameterize> Reparameterize for Mutex<R> {
     type SelfType<T2: AD> = R::SelfType<T2>;
 }
+#[cfg(feature = "std")]
 impl<R: Reparameterize> Reparameterize for RwLock<R> {
     type SelfType<T2: AD> = R::SelfType<T2>;
 }
@@ -102,6 +114,7 @@ impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> fo
         (**self).num_outputs()
     }
 }
+#[cfg(feature = "std")]
 impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> for Mutex<F> {
     const NAME: &'static str = F::NAME;
 
@@ -117,6 +130,7 @@ impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> fo
         self.lock().unwrap().num_outputs()
     }
 }
+#[cfg(feature = "std")]
 impl<T: AD, F: DifferentiableFunctionTrait<T>> DifferentiableFunctionTrait<T> for RwLock<F> {
     const NAME: &'static str = F::NAME;
 
@@ -278,11 +292,14 @@ impl DerivativeMethodTrait for FiniteDifferencing {
     }
 }
 
+#[cfg(feature = "std")]
 pub struct DerivativeMethodClassReverseAD;
+#[cfg(feature = "std")]
 impl DerivativeMethodClass for DerivativeMethodClassReverseAD {
     type DerivativeMethod = ReverseAD;
 }
 
+#[cfg(feature = "std")]
 /// Computes derivatives using Reverse-mode Automatic Differentiation.
 ///
 /// This method uses a global computation graph to track operations and then
@@ -290,11 +307,13 @@ impl DerivativeMethodClass for DerivativeMethodClassReverseAD {
 /// for functions with few outputs and many inputs.
 #[derive(Clone)]
 pub struct ReverseAD {}
+#[cfg(feature = "std")]
 impl ReverseAD {
     pub fn new() -> Self {
         Self {}
     }
 }
+#[cfg(feature = "std")]
 impl DerivativeMethodTrait for ReverseAD {
     type T = adr;
 
@@ -600,6 +619,7 @@ impl<const K: usize> DerivativeMethodTrait for FiniteDifferencingMulti2<K> {
     }
 }
 
+#[cfg(feature = "std")]
 #[derive(Clone)]
 pub struct WASP {
     cache: Arc<RwLock<WASPCache>>,
@@ -607,6 +627,7 @@ pub struct WASP {
     d_theta: f64,
     d_ell: f64,
 }
+#[cfg(feature = "std")]
 impl WASP {
     pub fn new(n: usize, m: usize, orthonormal_delta_x: bool, d_theta: f64, d_ell: f64) -> Self {
         Self {
@@ -626,6 +647,7 @@ impl WASP {
         return self.num_f_calls.read().unwrap().clone();
     }
 }
+#[cfg(feature = "std")]
 impl DerivativeMethodTrait for WASP {
     type T = f64;
 
@@ -685,6 +707,7 @@ impl DerivativeMethodTrait for WASP {
     }
 }
 
+#[cfg(feature = "std")]
 #[derive(Clone, Debug)]
 pub struct WASPCache {
     pub n: usize,
@@ -695,6 +718,7 @@ pub struct WASPCache {
     pub c_1: Vec<DMatrix<f64>>,
     pub c_2: Vec<DVector<f64>>,
 }
+#[cfg(feature = "std")]
 impl WASPCache {
     pub fn new(n: usize, m: usize, orthonormal_delta_x: bool) -> Self {
         let delta_f_t = DMatrix::<f64>::identity(n, m);
@@ -863,6 +887,7 @@ pub fn math_mod(a: i32, b: i32) -> i32 {
 }
 */
 
+#[cfg(feature = "std")]
 pub(crate) fn get_tangent_matrix(n: usize, orthogonal: bool) -> DMatrix<f64> {
     let mut rng = thread_rng();
     let uniform = Uniform::new(-1.0, 1.0);
@@ -1278,13 +1303,16 @@ impl DerivativeMethodTrait for WASPEc {
 
 */
 
+#[cfg(feature = "std")]
 #[derive(Clone)]
 pub struct SPSA;
+#[cfg(feature = "std")]
 impl SPSA {
     pub fn new() -> Self {
         Self {}
     }
 }
+#[cfg(feature = "std")]
 impl DerivativeMethodTrait for SPSA {
     type T = f64;
 
