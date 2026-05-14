@@ -278,6 +278,30 @@ where
         res
     }
 
+    /// Computes the function's value, Jacobian, and Hessian matrices at the given input point.
+    ///
+    /// # Compatible Methods
+    /// This method requires a derivative method that implements `HessianMethodTrait`.
+    /// Compatible methods include:
+    /// * `HessianAD<N>`: For Forward-over-Forward Hessian computation.
+    /// * `HessianAD_FOR<N>`: For Forward-over-Reverse Hessian computation.
+    #[cfg(feature = "hessian")]
+    #[inline]
+    pub fn hessian(
+        &self,
+        inputs: &[f64],
+    ) -> (Vec<f64>, nalgebra::DMatrix<f64>, Vec<nalgebra::DMatrix<f64>>)
+    where
+        E: crate::differentiable_function::HessianMethodTrait,
+    {
+        assert_eq!(inputs.len(), self.num_inputs());
+        let res = self
+            .derivative_method
+            .hessian(inputs, &self.function_derivative);
+        assert_eq!(res.0.len(), self.num_outputs());
+        res
+    }
+
     /*
     pub fn new(_function_type: R, function_standard: R::Output<f64>, function_derivative: R::Output<E::T>, derivative_method: E) -> Self {
         Self {

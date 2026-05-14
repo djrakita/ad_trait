@@ -128,6 +128,16 @@
     feature(trivial_bounds, portable_simd, min_specialization)
 )]
 
+#[cfg(feature = "wasm_compat")]
+pub extern crate nalgebra_compat as nalgebra;
+#[cfg(all(feature = "latest_deps", not(feature = "wasm_compat")))]
+pub extern crate nalgebra_latest as nalgebra;
+
+#[cfg(all(feature = "bevy", feature = "wasm_compat"))]
+pub extern crate bevy_reflect_compat as bevy_reflect;
+#[cfg(all(feature = "bevy", feature = "latest_deps", not(feature = "wasm_compat")))]
+pub extern crate bevy_reflect_latest as bevy_reflect;
+
 extern crate alloc;
 #[cfg(any(feature = "std", test))]
 extern crate std;
@@ -381,6 +391,7 @@ pub enum ADNumMode {
 
 /// Identifies the specific numerical type used in AD computations.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[allow(non_camel_case_types)]
 pub enum ADNumType {
     /// Standard 64-bit float.
     F64,
@@ -395,6 +406,12 @@ pub enum ADNumType {
     ADF,
     /// SIMD-based 64-bit float vector.
     F64XN,
+    #[cfg(feature = "hessian")]
+    /// Hyper-dual forward-mode AD type.
+    HYPER_ADFN,
+    #[cfg(feature = "hessian")]
+    /// Forward-over-reverse AD type.
+    HYPER_ADR,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -804,3 +821,6 @@ impl ADConvertableTrait for () {
         ()
     }
 }
+
+#[cfg(feature = "hessian")]
+pub mod hyper_ad;

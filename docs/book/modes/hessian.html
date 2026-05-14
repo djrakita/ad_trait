@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Finite Differencing - ad_trait: Automatic Differentiation for Rust</title>
+        <title>Hessian / Second-Order AD - ad_trait: Automatic Differentiation for Rust</title>
 
 
         <!-- Custom HTML head -->
@@ -146,7 +146,7 @@
                         <a href="https://github.com/djrakita/ad_trait" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
-                        <a href="https://github.com/djrakita/ad_trait/edit/main/docs/src/src/modes/finite_differencing.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/djrakita/ad_trait/edit/main/docs/src/src/modes/hessian.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
                         </a>
 
@@ -180,32 +180,121 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="finite-differencing"><a class="header" href="#finite-differencing">Finite Differencing</a></h1>
-<p>Finite Differencing is a classical numerical method for estimating derivatives. It is provided in <code>ad_trait</code> as a baseline and for functions where AD types might be impractical.</p>
-<h2 id="how-it-works"><a class="header" href="#how-it-works">How it Works</a></h2>
-<p>The derivative is approximated using the formula:
-$$f’(x) \approx \frac{f(x + h) - f(x)}{h}$$
-where $h$ is a very small value.</p>
-<h2 id="accuracy-vs-precision"><a class="header" href="#accuracy-vs-precision">Accuracy vs. Precision</a></h2>
-<p>Finite differencing is an approximation and is subject to both truncation error (making $h$ too large) and round-off error (making $h$ too small). It is generally much less precise than true automatic differentiation.</p>
-<h2 id="usage-example"><a class="header" href="#usage-example">Usage Example</a></h2>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use ad_trait::FiniteDifferencing;
+                        <h1 id="hessian--second-order-ad"><a class="header" href="#hessian--second-order-ad">Hessian / Second-Order AD</a></h1>
+<p><code>ad_trait</code> supports computing second-order derivatives (Hessians) by nesting automatic differentiation types. This is achieved through the <code>HyperAD</code> family of types.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The bracketed value <code>&lt;N&gt;</code> (e.g., <code>adfn&lt;N&gt;</code>, <code>HessianAD&lt;N&gt;</code>) is a <strong>const generic</strong> that specifies the number of <strong>tangent lanes</strong>. For Hessian computation, this typically should match the number of input variables you are differentiating with respect to.</p>
+</blockquote>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Mode</th><th>Type</th><th>Best For</th><th>Scaling</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Forward-over-Forward</strong></td><td><code>HyperAD_ADFN&lt;N&gt;</code></td><td>Few inputs ($N &lt; 20$), low memory.</td><td>$O(N^2)$</td></tr>
+<tr><td><strong>Forward-over-Reverse</strong></td><td><code>HyperAD_ADR&lt;N&gt;</code></td><td>Many inputs, few outputs (e.g., loss functions).</td><td>$O(N)$</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="choosing-the-right-mode"><a class="header" href="#choosing-the-right-mode">Choosing the Right Mode</a></h2>
+<p>Selecting the optimal mode depends primarily on the number of input variables ($N$) and the memory constraints of your application.</p>
+<h3 id="forward-over-forward-fof"><a class="header" href="#forward-over-forward-fof">Forward-over-Forward (FoF)</a></h3>
+<ul>
+<li><strong>When to use</strong>: Use this when you have a small number of inputs. It is the most robust mode and has the lowest memory overhead because it does not require building a computation graph.</li>
+<li><strong>Efficiency</strong>: The computational cost scales quadratically with the number of inputs ($O(N^2)$). For a function with 10 inputs, it is very fast; for 1000 inputs, it becomes prohibitively slow.</li>
+<li><strong>Implementation</strong>: Uses <code>HessianAD&lt;N&gt;</code>.</li>
+</ul>
+<h3 id="forward-over-reverse-for"><a class="header" href="#forward-over-reverse-for">Forward-over-Reverse (FoR)</a></h3>
+<ul>
+<li><strong>When to use</strong>: Use this for functions with many inputs and a single (or few) outputs, such as a neural network loss function or a complex physics simulation.</li>
+<li><strong>Efficiency</strong>: This mode is significantly more efficient for large $N$. Because the inner layer is Reverse-mode AD, a single backpropagation through a tangent value can recover an entire row of the Hessian. This allows the total cost to scale linearly with the number of inputs ($O(N)$) for scalar-valued functions.</li>
+<li><strong>Memory</strong>: Higher memory usage than FoF because it must maintain the reverse-mode computation graph.</li>
+<li><strong>Implementation</strong>: Uses <code>HessianAD_FOR&lt;N&gt;</code>.</li>
+</ul>
+<h2 id="forward-over-forward-hessian"><a class="header" href="#forward-over-forward-hessian">Forward-over-Forward Hessian</a></h2>
+<p>This mode uses <code>HyperAD_ADFN</code>, which is essentially an <code>adfn</code> type where the primary value and tangents are themselves <code>adfn</code> types.</p>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<pre class="playground"><code class="language-rust">use ad_trait::AD;
+use ad_trait::function_engine::FunctionEngine;
+use ad_trait::differentiable_function::{DifferentiableFunctionTrait, HessianAD, ToOtherADType};
+use ad_trait::hyper_ad::hyper::HyperAD_ADFN;
 
-// evaluate with FiniteDifferencing
-let engine = FunctionEngine::new(func.clone(), func, FiniteDifferencing::new());
-<span class="boring">}</span></code></pre>
+#[derive(Clone)]
+struct MyFunc;
+impl&lt;T: AD&gt; DifferentiableFunctionTrait&lt;T&gt; for MyFunc {
+    const NAME: &amp;'static str = "MyFunc";
+    fn call(&amp;self, inputs: &amp;[T], _freeze: bool) -&gt; Vec&lt;T&gt; {
+        let x = inputs[0];
+        vec![ x * x * x ] // f(x) = x^3
+    }
+    fn num_inputs(&amp;self) -&gt; usize { 1 }
+    fn num_outputs(&amp;self) -&gt; usize { 1 }
+}
+
+fn main() {
+    let inputs = [2.0];
+    let func = MyFunc;
+    let engine = FunctionEngine::new(
+        func.clone(), 
+        func.to_other_ad_type::&lt;HyperAD_ADFN&lt;1&gt;&gt;(), 
+        HessianAD::&lt;1&gt;::new()
+    );
+
+    let (f_res, jacobian_res, hessian_res) = engine.hessian(&amp;inputs);
+    
+    println!("f(2) = {}", f_res[0]);             // 8.0
+    println!("f'(2) = {}", jacobian_res[(0,0)]);  // 12.0
+    println!("f''(2) = {}", hessian_res[0][(0,0)]); // 12.0
+}</code></pre>
+<h2 id="forward-over-reverse-hessian"><a class="header" href="#forward-over-reverse-hessian">Forward-over-Reverse Hessian</a></h2>
+<p>This mode uses <code>HyperAD_ADR</code>, which uses <code>adr</code> as the inner type. This is useful when you want to combine the benefits of forward and reverse mode.</p>
+<h3 id="example-1"><a class="header" href="#example-1">Example</a></h3>
+<pre class="playground"><code class="language-rust">use ad_trait::AD;
+use ad_trait::function_engine::FunctionEngine;
+use ad_trait::differentiable_function::{DifferentiableFunctionTrait, HessianAD_FOR, ToOtherADType};
+use ad_trait::hyper_ad::hyper_adr::HyperAD_ADR;
+
+#[derive(Clone)]
+struct MyFunc;
+impl&lt;T: AD&gt; DifferentiableFunctionTrait&lt;T&gt; for MyFunc {
+    const NAME: &amp;'static str = "MyFunc";
+    fn call(&amp;self, inputs: &amp;[T], _freeze: bool) -&gt; Vec&lt;T&gt; {
+        let x = inputs[0];
+        vec![ x * x * x ]
+    }
+    fn num_inputs(&amp;self) -&gt; usize { 1 }
+    fn num_outputs(&amp;self) -&gt; usize { 1 }
+}
+
+fn main() {
+    let inputs = [2.0];
+    let func = MyFunc;
+    let engine = FunctionEngine::new(
+        func.clone(), 
+        func.to_other_ad_type::&lt;HyperAD_ADR&lt;1&gt;&gt;(), 
+        HessianAD_FOR::&lt;1&gt;::new()
+    );
+
+    let (f_res, jacobian_res, hessian_res) = engine.hessian(&amp;inputs);
+    
+    println!("f'(2) = {}", jacobian_res[(0,0)]);    // 12.0
+    println!("f''(2) = {}", hessian_res[0][(0,0)]); // 12.0
+}</code></pre>
+<h2 id="first-order-derivatives-from-hessian-engines"><a class="header" href="#first-order-derivatives-from-hessian-engines">First-Order Derivatives from Hessian Engines</a></h2>
+<p>It is important to note that a <code>FunctionEngine</code> initialized for Hessian computation can still be used for standard first-order derivatives.</p>
+<p>Calling <code>engine.derivative(&amp;inputs)</code> on a Hessian-enabled block will return the Jacobian matrix as usual. This is possible because the hyper-dual types used for second-order differentiation internally track the first-order gradients as their primal “tangent” values.</p>
+<p>This allows you to maintain a single <code>FunctionEngine</code> instance for both standard gradient-based optimization and second-order methods.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../modes/reverse.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../modes/finite_differencing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../modes/hessian.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../advanced/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -215,11 +304,11 @@ let engine = FunctionEngine::new(func.clone(), func, FiniteDifferencing::new());
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../modes/reverse.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../modes/finite_differencing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../modes/hessian.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../advanced/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

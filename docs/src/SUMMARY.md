@@ -8,6 +8,7 @@
   - [Forward-Mode AD](modes/forward.md)
   - [Reverse-Mode AD](modes/reverse.md)
   - [Finite Differencing](modes/finite_differencing.md)
+  - [Hessian / Second-Order AD](modes/hessian.md)
 - [Advanced Topics](advanced/index.md)
   - [Multi-Tangents](advanced/multi_tangent.md)
   - [SIMD Acceleration](advanced/simd.md)

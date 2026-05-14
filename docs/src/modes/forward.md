@@ -1,6 +1,6 @@
 # Forward-Mode AD
 
-Forward-mode automatic differentiation propagates derivatives along with the function evaluation. In `ad_trait`, this is implemented using the `adfn<N>` type.
+Forward-mode automatic differentiation propagates derivatives along with the function evaluation. In `ad_trait`, this is implemented using the `adfn<N>` type, where `N` is a **const generic** representing the number of "tangent lanes" (the number of derivatives tracked simultaneously).
 
 ## How it Works
 

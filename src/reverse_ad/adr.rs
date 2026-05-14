@@ -5,6 +5,7 @@ use std::sync::RwLock;
 
 use crate::{ADNumMode, ADNumType, AD, F64};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
+#[cfg(feature = "bevy")]
 use bevy_reflect::Reflect;
 use core::cmp::Ordering;
 use core::fmt;
@@ -31,8 +32,9 @@ compile_error!("Reverse AD (adr) currently requires the 'std' feature. Please en
 /// in a global computation graph. This allows for computing gradients by rebuilding
 /// the chain of operations and backpropagating adjoints.
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Reflect)]
-#[reflect(from_reflect = false)]
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "bevy", derive(Reflect))]
+#[cfg_attr(feature = "bevy", reflect(from_reflect = false))]
 pub struct adr {
     /// The primary value.
     value: f64,

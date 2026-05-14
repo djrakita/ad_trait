@@ -2,15 +2,16 @@
 
 [![](https://img.shields.io/crates/v/ad_trait.svg)](https://crates.io/crates/ad_trait) [![](https://img.shields.io/badge/docs-book-blue)](https://djrakita.github.io/ad_trait/) [![](https://docs.rs/ad_trait/badge.svg)](https://docs.rs/ad_trait) [![](https://github.com/djrakita/ad_trait/actions/workflows/deploy_book.yml/badge.svg)](https://github.com/djrakita/ad_trait/actions/workflows/deploy_book.yml) [![](https://github.com/djrakita/ad_trait/actions/workflows/rust.yml/badge.svg)](https://github.com/djrakita/ad_trait/actions/workflows/rust.yml)
 
-# Introduction
-This crate brings easy to use, efficient, and highly flexi
-Rust programming language. Utilizing Rust's extensive and
-types in this crate that implement the trait AD can be tho
-f64 or f32 that affords forward mode or backwards mode aut
+## Introduction
+This crate brings easy to use, efficient, and highly flexible automatic differentiation to the
+Rust programming language. Utilizing Rust's extensive and expressive trait features, the several
+types in this crate that implement the trait AD can be thought of as a drop-in replacement for an
+f64 or f32 that affords forward mode or backwards mode automatic differentiation on any downstream
 computation in Rust.
-# Key Features
+## Key Features
 - ad_trait supports reverse mode or forward mode automatic differentiation. The forward mode automatic
 differentiation implementation can also take advantage of SIMD to compute multiple tangents simultaneously.
+- **Second-Order AD**: Supports computing Hessians via recursive dual types, including Forward-over-Forward and Forward-over-Reverse modes.
 - The core rust f64 or f32 types also implement the AD trait, meaning any functions that take an AD
 trait object as a generic type can handle either standard floating point computation or derivative
 tracking automatic differentiation with essentially no overhead.
@@ -18,10 +19,10 @@ tracking automatic differentiation with essentially no overhead.
 to operate almost exactly as a standard f64. For example, it even implements the `RealField` and
 `ComplexField` traits, meaning it can be used in any `nalgebra` or `ndarray` computations.
 
-# Example
+## Example
 ```rust
 use ad_trait::AD;
-use ad_trait::differentiable_block::DifferentiableBlock;
+use ad_trait::function_engine::FunctionEngine;
 use ad_trait::differentiable_function::{DifferentiableFunctionTrait, FiniteDifferencing, ForwardAD, ForwardADMulti, ReverseAD};
 use ad_trait::forward_ad::adfn::adfn;
 use ad_trait::reverse_ad::adr::adr;
@@ -58,7 +59,7 @@ fn main() {
   // Reverse AD //////////////////////////////////////////////////////////////////////////////////
   let function_standard = Test { coeff: 2.0 };
   let function_derivative = function_standard.to_other_ad_type::<adr>();
-  let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, ReverseAD::new());
+  let differentiable_block = FunctionEngine::new(function_standard, function_derivative, ReverseAD::new());
 
   let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
   println!("Reverse AD: ");
@@ -70,7 +71,7 @@ fn main() {
   // Forward AD //////////////////////////////////////////////////////////////////////////////////
   let function_standard = Test { coeff: 2.0 };
   let function_derivative = function_standard.to_other_ad_type::<adfn<1>>();
-  let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, ForwardAD::new());
+  let differentiable_block = FunctionEngine::new(function_standard, function_derivative, ForwardAD::new());
 
   let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
   println!("Forward AD: ");
@@ -82,7 +83,7 @@ fn main() {
   // Forward AD Multi ////////////////////////////////////////////////////////////////////////////
   let function_standard = Test { coeff: 2.0 };
   let function_derivative = function_standard.to_other_ad_type::<adfn<2>>();
-  let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, ForwardADMulti::new());
+  let differentiable_block = FunctionEngine::new(function_standard, function_derivative, ForwardADMulti::new());
 
   let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
   println!("Forward AD Multi: ");
@@ -94,7 +95,7 @@ fn main() {
   // Finite Differencing /////////////////////////////////////////////////////////////////////////
   let function_standard = Test { coeff: 2.0 };
   let function_derivative = function_standard.clone();
-  let differentiable_block = DifferentiableBlock::new(function_standard, function_derivative, FiniteDifferencing::new());
+  let differentiable_block = FunctionEngine::new(function_standard, function_derivative, FiniteDifferencing::new());
 
   let (f_res, derivative_res) = differentiable_block.derivative(&inputs);
   println!("Finite Differencing: ");
@@ -103,10 +104,24 @@ fn main() {
   println!("//////////////");
   println!();
 
+  // Second-Order Derivatives (Hessian) //////////////////////////////////////////////////////////
+  // Using HessianAD for Forward-over-Forward Hessian
+  use ad_trait::differentiable_function::HessianAD;
+  let function_standard = Test { coeff: 2.0 };
+  let function_derivative = function_standard.to_other_ad_type::<HyperAD_ADFN<1>>();
+  let differentiable_block = FunctionEngine::new(function_standard, function_derivative, HessianAD::<1>::new());
+
+  let (f_res, jacobian_res, hessian_res) = differentiable_block.hessian(&inputs);
+  println!("Second-Order AD: ");
+  println!("  f_res: {}", f_res[0]);
+  println!("  jacobian: {}", jacobian_res);
+  println!("  hessian: {:?}", hessian_res);
+  println!("//////////////");
+  println!();
 }
 ```
 
-# Citation
+## Citation
 
 For more information about our work, refer to our paper:
 https://arxiv.org/abs/2504.15976

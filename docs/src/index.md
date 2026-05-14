@@ -12,6 +12,7 @@ Automatic Differentiation is a set of techniques to numerically evaluate the der
 - **Integration**: Seamlessly works with `nalgebra` and `ndarray`.
 - **Flexibility**: Define your own differentiable functions using a simple trait.
 - **Performance**: High-performance implementations including multi-tangent forward AD and SIMD acceleration.
+- **Second-Order AD**: Native support for Hessians via recursive dual types.
 
 ## Goals
 

@@ -8,6 +8,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **Forward-Mode** | Exact | Very Fast | Slow | Exact |
 | **Reverse-Mode** | Exact | Moderate | Very Fast | Exact |
+| **Hessian AD** | Exact | Moderate | Slow | Exact |
 | **Finite Differencing** | Approx | Fast | Very Slow | Low |
 
 In the following chapters, we will explore each of these modes in detail.

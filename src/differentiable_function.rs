@@ -419,6 +419,234 @@ impl DerivativeMethodTrait for ForwardAD {
     }
 }
 
+/// Defines a method for computing the Hessian of a `DifferentiableFunctionTrait`.
+///
+/// Implementations of this trait are used by `FunctionEngine::hessian` to extract
+/// second-order information from recursive AD types.
+///
+/// # Implementors
+/// * `HessianAD<N>`: For Forward-over-Forward Hessians.
+/// * `HessianAD_FOR<N>`: For Forward-over-Reverse Hessians.
+#[diagnostic::on_unimplemented(
+    message = "the derivative method `{Self}` does not support Hessian computation",
+    label = "this method does not implement `HessianMethodTrait`",
+    note = "Hessian computation requires recursive AD types. Use `HessianAD<N>` (Forward-over-Forward) or `HessianAD_FOR<N>` (Forward-over-Reverse) instead."
+)]
+pub trait HessianMethodTrait: DerivativeMethodTrait {
+    /// Computes the function's value, Jacobian, and Hessian matrices at the given input point.
+    fn hessian<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>, Vec<DMatrix<f64>>);
+}
+
+#[cfg(feature = "hessian")]
+use crate::hyper_ad::hyper::HyperAD_ADFN;
+
+#[cfg(feature = "hessian")]
+#[derive(Clone)]
+pub struct HessianAD<const N: usize> {}
+#[cfg(feature = "hessian")]
+impl<const N: usize> HessianAD<N> {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[cfg(feature = "hessian")]
+impl<const N: usize> DerivativeMethodTrait for HessianAD<N> {
+    type T = HyperAD_ADFN<N>;
+
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
+        // HessianAD can still be used for just derivatives
+        let num_inputs = inputs.len();
+        let num_outputs = function.num_outputs();
+        let mut out_derivative = DMatrix::zeros(num_outputs, num_inputs);
+        let mut out_value = vec![];
+
+        let mut inputs_ad = vec![];
+        for (i, input) in inputs.iter().enumerate() {
+            let mut inner = adfn::<N>::constant(*input);
+            if i < N {
+                inner.set_tangent_value(i, 1.0);
+            }
+            let mut outer = HyperAD_ADFN::<N>::new_inner_constant(inner);
+            if i < N {
+                outer.set_tangent_value(i, 1.0);
+            }
+            inputs_ad.push(outer);
+        }
+
+        let f = function.call(&inputs_ad, false);
+        for (row_idx, res) in f.iter().enumerate() {
+            out_value.push(res.value());
+            let grad = res.tangent_as_vec();
+            for (col_idx, g) in grad.iter().enumerate() {
+                if col_idx < num_inputs {
+                    out_derivative[(row_idx, col_idx)] = *g;
+                }
+            }
+        }
+
+        (out_value, out_derivative)
+    }
+}
+
+#[cfg(feature = "hessian")]
+impl<const N: usize> HessianMethodTrait for HessianAD<N> {
+    fn hessian<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>, Vec<DMatrix<f64>>) {
+        let num_inputs = inputs.len();
+        let num_outputs = function.num_outputs();
+        let mut out_value = vec![];
+        let mut out_jacobian = DMatrix::zeros(num_outputs, num_inputs);
+        let mut out_hessians = vec![DMatrix::zeros(num_inputs, num_inputs); num_outputs];
+
+        // Loop over rows and columns in batches of N
+        for row_batch_start in (0..num_inputs).step_by(N) {
+            for col_batch_start in (0..num_inputs).step_by(N) {
+                let mut inputs_ad = vec![];
+                for (i, input) in inputs.iter().enumerate() {
+                    let mut inner = adfn::<N>::constant(*input);
+                    if i >= col_batch_start && i < col_batch_start + N {
+                        inner.set_tangent_value(i - col_batch_start, 1.0);
+                    }
+                    let mut outer = HyperAD_ADFN::<N>::new_inner_constant(inner);
+                    if i >= row_batch_start && i < row_batch_start + N {
+                        outer.set_tangent_value(i - row_batch_start, 1.0);
+                    }
+                    inputs_ad.push(outer);
+                }
+
+                let f = function.call(&inputs_ad, row_batch_start > 0 || col_batch_start > 0);
+                for (row_idx, res) in f.iter().enumerate() {
+                    if row_batch_start == 0 && col_batch_start == 0 {
+                        out_value.push(res.value());
+                    }
+                    
+                    // Extract Jacobian (only need to do this for one set of column batches per row batch)
+                    if row_batch_start == 0 {
+                        let grad = res.inner_value().tangent_as_vec();
+                        for i in 0..N {
+                            if col_batch_start + i < num_inputs {
+                                out_jacobian[(row_idx, col_batch_start + i)] = grad[i];
+                            }
+                        }
+                    }
+
+                    // Extract Hessian block
+                    for i in 0..N {
+                        let r_idx = row_batch_start + i;
+                        if r_idx >= num_inputs { break; }
+                        
+                        let hess_row_chunk = res.tangent[i].tangent_as_vec();
+                        for j in 0..N {
+                            let c_idx = col_batch_start + j;
+                            if c_idx >= num_inputs { break; }
+                            out_hessians[row_idx][(r_idx, c_idx)] = hess_row_chunk[j];
+                        }
+                    }
+                }
+            }
+        }
+
+        (out_value, out_jacobian, out_hessians)
+    }
+}
+
+#[cfg(all(feature = "hessian", feature = "std"))]
+use crate::hyper_ad::hyper_adr::HyperAD_ADR;
+
+#[cfg(all(feature = "hessian", feature = "std"))]
+#[derive(Clone)]
+#[allow(non_camel_case_types)]
+pub struct HessianAD_FOR<const N: usize> {}
+#[cfg(all(feature = "hessian", feature = "std"))]
+impl<const N: usize> HessianAD_FOR<N> {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[cfg(all(feature = "hessian", feature = "std"))]
+impl<const N: usize> DerivativeMethodTrait for HessianAD_FOR<N> {
+    type T = HyperAD_ADR<N>;
+
+    fn derivative<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>) {
+        let res = self.hessian(inputs, function);
+        (res.0, res.1)
+    }
+}
+
+#[cfg(all(feature = "hessian", feature = "std"))]
+impl<const N: usize> HessianMethodTrait for HessianAD_FOR<N> {
+    fn hessian<D: DifferentiableFunctionTrait<Self::T> + ?Sized>(
+        &self,
+        inputs: &[f64],
+        function: &D,
+    ) -> (Vec<f64>, DMatrix<f64>, Vec<DMatrix<f64>>) {
+        let num_inputs = inputs.len();
+        let num_outputs = function.num_outputs();
+        let mut out_value = vec![];
+        let mut out_jacobian = DMatrix::zeros(num_outputs, num_inputs);
+        let mut out_hessians = vec![DMatrix::zeros(num_inputs, num_inputs); num_outputs];
+
+        // Loop over rows in batches of N. Each pass recovers full columns via backprop.
+        for row_batch_start in (0..num_inputs).step_by(N) {
+            let mut inputs_ad = vec![];
+            let mut inputs_adr = vec![];
+            for (i, input) in inputs.iter().enumerate() {
+                // Reset computation graph only on the very first batch
+                let adr_var = crate::reverse_ad::adr::adr::new_variable(*input, i == 0 && row_batch_start == 0);
+                inputs_adr.push(adr_var);
+                let mut outer = HyperAD_ADR::<N>::new_inner_constant(adr_var);
+                if i >= row_batch_start && i < row_batch_start + N {
+                    outer.set_tangent_value(i - row_batch_start, 1.0);
+                }
+                inputs_ad.push(outer);
+            }
+
+            let f = function.call(&inputs_ad, row_batch_start > 0);
+            for (row_idx, res) in f.iter().enumerate() {
+                if row_batch_start == 0 {
+                    out_value.push(res.value());
+                    
+                    // Extract full Jacobian from primal ADR
+                    let grad = res.value.get_backwards_mode_grad();
+                    for (col_idx, adr_var) in inputs_adr.iter().enumerate() {
+                        out_jacobian[(row_idx, col_idx)] = grad.wrt(adr_var);
+                    }
+                }
+
+                // Extract Hessian rows for this batch
+                for i in 0..N {
+                    let r_idx = row_batch_start + i;
+                    if r_idx >= num_inputs { break; }
+                    
+                    let grad_hess = res.tangent[i].get_backwards_mode_grad();
+                    for (c_idx, adr_var) in inputs_adr.iter().enumerate() {
+                        out_hessians[row_idx][(r_idx, c_idx)] = grad_hess.wrt(adr_var);
+                    }
+                }
+            }
+        }
+
+        (out_value, out_jacobian, out_hessians)
+    }
+}
+
 pub struct DerivativeMethodClassForwardADMulti<A: AD + ForwardADTrait>(PhantomData<A>);
 impl<A: AD + ForwardADTrait> DerivativeMethodClass for DerivativeMethodClassForwardADMulti<A> {
     type DerivativeMethod = ForwardADMulti<A>;
@@ -672,7 +900,7 @@ impl DerivativeMethodTrait for WASP {
 
             let delta_x_i = cache.delta_x.column(i);
 
-            let x_k_plus_delta_x_i = &x + epsilon * &delta_x_i;
+            let x_k_plus_delta_x_i: DVector<f64> = &x + epsilon * &delta_x_i;
             let f_k_plus_delta_x_i = DVector::<f64>::from_column_slice(
                 &function.call(x_k_plus_delta_x_i.as_slice(), true),
             );
@@ -726,7 +954,7 @@ impl WASPCache {
         let mut c_1 = vec![];
         let mut c_2 = vec![];
 
-        let a_mat = 2.0 * &delta_x * &delta_x.transpose();
+        let a_mat: DMatrix<f64> = 2.0 * &delta_x * &delta_x.transpose();
         let a_inv_mat = a_mat.try_inverse().unwrap();
 
         for i in 0..n {
@@ -803,7 +1031,7 @@ impl DerivativeMethodTrait for WASP2 {
 
             let delta_x_i = cache.delta_x.column(i);
 
-            let x_k_plus_delta_x_i = &x + epsilon*&delta_x_i;
+            let x_k_plus_delta_x_i: DVector<f64> = &x + epsilon*&delta_x_i;
             let f_k_plus_delta_x_i = DVector::<f64>::from_column_slice(&function.call(x_k_plus_delta_x_i.as_slice(), true));
             num_f_calls += 1;
             let delta_f_i = (&f_k_plus_delta_x_i - &f_k_dv) / epsilon;
@@ -1333,8 +1561,8 @@ impl DerivativeMethodTrait for SPSA {
             .collect();
         let x = DVector::from_column_slice(inputs);
         let delta_k = DVector::from_column_slice(&r);
-        let xpos = &x + epsilon * &delta_k;
-        let xneg = &x - epsilon * &delta_k;
+        let xpos: DVector<f64> = &x + epsilon * &delta_k;
+        let xneg: DVector<f64> = &x - epsilon * &delta_k;
         let fpos = DVector::from_column_slice(&function.call(xpos.as_slice(), false));
         let fneg = DVector::from_column_slice(&function.call(xneg.as_slice(), false));
         let v = (&fpos - &fneg) / (2.0 * epsilon);

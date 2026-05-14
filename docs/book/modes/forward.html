@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b68f6b0e.js";
+            window.path_to_searchindex_js = "../searchindex-bcd09740.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-01f9e83b.js"></script>
+        <script src="../toc-b4c2bab5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,7 +181,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="forward-mode-ad"><a class="header" href="#forward-mode-ad">Forward-Mode AD</a></h1>
-<p>Forward-mode automatic differentiation propagates derivatives along with the function evaluation. In <code>ad_trait</code>, this is implemented using the <code>adfn&lt;N&gt;</code> type.</p>
+<p>Forward-mode automatic differentiation propagates derivatives along with the function evaluation. In <code>ad_trait</code>, this is implemented using the <code>adfn&lt;N&gt;</code> type, where <code>N</code> is a <strong>const generic</strong> representing the number of “tangent lanes” (the number of derivatives tracked simultaneously).</p>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How it Works</a></h2>
 <p>A forward-mode AD variable can be thought of as a pair $(v, \dot{v})$, where $v$ is the current value and $\dot{v}$ is its tangent (the derivative with respect to some input). Every operation on these variables updates both the value and the tangent using the rules of calculus.</p>
 <h2 id="single-tangent-forward-ad"><a class="header" href="#single-tangent-forward-ad">Single-Tangent Forward AD</a></h2>

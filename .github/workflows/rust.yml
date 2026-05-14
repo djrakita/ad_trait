@@ -15,7 +15,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Build
+    - name: Build (latest_deps)
       run: cargo build --verbose
-    - name: Run tests
+    - name: Run tests (latest_deps)
       run: cargo test --verbose
+
+    - name: Build (wasm_compat)
+      run: cargo build --verbose --no-default-features --features wasm_compat,std,bevy,rand,serde,hessian
+    - name: Run tests (wasm_compat)
+      run: cargo test --verbose --no-default-features --features wasm_compat,std,bevy,rand,serde,hessian
