@@ -121,6 +121,20 @@ fn main() {
 }
 ```
 
+## Changelog
+
+### [0.3.0]
+- **Second-Order AD**: Added full support for computing Hessians via recursive dual types.
+- **New AD Modes**:
+  - **Forward-over-Forward**: Using the new `HyperAD_ADFN` type.
+  - **Forward-over-Reverse**: Using the new `HyperAD_ADR` type.
+- **FunctionEngine Improvements**:
+  - Added a high-level `.hessian()` method to `FunctionEngine` for one-call value/gradient/Hessian evaluation.
+  - Implemented automatic **multi-pass batching** for Hessian computation, allowing full Hessian recovery even when the number of tangent lanes is smaller than the input dimension.
+- **Enhanced Diagnostics**: Integrated `#[diagnostic::on_unimplemented]` to provide clear, actionable compiler error messages when calling Hessian methods on incompatible engines.
+- **Stability**: Promoted `hessian` features from experimental to a default library feature.
+- **Documentation**: Major updates to the `ad_trait` book with dedicated theory and implementation pages for second-order derivatives.
+
 ## Citation
 
 For more information about our work, refer to our paper:
