@@ -1,7 +1,6 @@
 // use once_cell::sync::OnceCell;
 
-#[cfg(feature = "std")]
-use std::sync::RwLock;
+
 
 use crate::{ADNumMode, ADNumType, AD, F64};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
@@ -40,7 +39,7 @@ pub struct adr {
     value: f64,
     /// The index of the node representing this value in the computation graph.
     #[reflect(ignore)]
-    node_idx: NodeIdx,
+    node_idx: NodeIdxOpt,
 }
 impl Debug for adr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -78,13 +77,13 @@ impl adr {
     #[inline]
     pub fn is_constant(&self) -> bool {
         match self.node_idx {
-            NodeIdx::Constant => true,
+            NodeIdxOpt::Constant => true,
             _ => false,
         }
     }
     /// Initiates a backward pass from this node to compute gradients (adjoints)
     /// for all parent nodes in the computation graph.
-    pub fn get_backwards_mode_grad(&self) -> BackwardsModeGradOutput {
+    pub fn get_backwards_mode_grad(&self) -> BackwardsModeGradOutputOpt {
         GlobalComputationGraph::get().get_backwards_mode_grad(self.node_idx)
     }
 }
@@ -168,10 +167,10 @@ impl<'de> Deserialize<'de> for adr {
 }
 
 #[derive(Clone, Debug)]
-pub struct BackwardsModeGradOutput {
+pub struct BackwardsModeGradOutputOpt {
     adjoints: Vec<f64>,
 }
-impl BackwardsModeGradOutput {
+impl BackwardsModeGradOutputOpt {
     pub fn wrt(&self, v: &adr) -> f64 {
         self.adjoints[v.node_idx.get_idx()]
     }
@@ -181,7 +180,7 @@ impl AD for adr {
     fn constant(constant: f64) -> Self {
         return adr {
             value: constant,
-            node_idx: NodeIdx::Constant,
+            node_idx: NodeIdxOpt::Constant,
         };
     }
 
@@ -275,40 +274,34 @@ impl<R: Clone + Dim, C: Clone + Dim, S: Clone + RawStorageMut<Self, R, C>> Nalge
 */
 
 #[derive(Debug)]
-pub struct ComputationGraph {
-    add_idx: RwLock<usize>,
-    nodes: RwLock<Vec<ComputationGraphNode>>,
+pub struct ComputationGraphOpt {
+    nodes: std::cell::RefCell<Vec<ComputationGraphNode>>,
 }
-impl ComputationGraph {
+impl ComputationGraphOpt {
     #[allow(dead_code)]
     fn new() -> Self {
         Self {
-            add_idx: RwLock::new(0),
-            nodes: RwLock::new(vec![]),
+            nodes: std::cell::RefCell::new(vec![]),
         }
     }
     #[allow(dead_code)]
     fn new_preallocated(num_to_preallocate: usize) -> Self {
         Self {
-            add_idx: RwLock::new(0),
-            nodes: RwLock::new(vec![ComputationGraphNode::default(); num_to_preallocate]),
+            nodes: std::cell::RefCell::new(Vec::with_capacity(num_to_preallocate)),
         }
     }
     fn reset(&self) {
-        // self.nodes.write().expect("error").clear()
-        *self.add_idx.write().expect("error") = 0;
+        self.nodes.borrow_mut().clear();
     }
-    pub fn get_backwards_mode_grad(&self, node_idx_enum: NodeIdx) -> BackwardsModeGradOutput {
-        let nodes = self.nodes.read().unwrap();
-        let add_idx = *self.add_idx.read().unwrap();
-        let l = add_idx;
+    pub fn get_backwards_mode_grad(&self, node_idx_enum: NodeIdxOpt) -> BackwardsModeGradOutputOpt {
+        let nodes = self.nodes.borrow();
+        let l = nodes.len();
         let mut adjoints = vec![0.0; l];
         match node_idx_enum {
-            NodeIdx::Constant => {
-                //panic!("cannot get backwards mode grad on a constant.")
-                return BackwardsModeGradOutput { adjoints };
+            NodeIdxOpt::Constant => {
+                return BackwardsModeGradOutputOpt { adjoints };
             }
-            NodeIdx::Idx(node_idx) => {
+            NodeIdxOpt::Idx(node_idx) => {
                 adjoints[node_idx] = 1.0;
             }
         }
@@ -320,145 +313,106 @@ impl ComputationGraph {
                 .get_derivatives_wrt_parents(node.parent_0, node.parent_1);
             if parent_adjoints.len() == 1 {
                 let curr_adjoint = adjoints[node_idx];
-                let parent_0_idx = node.parent_0_idx.unwrap();
-                if parent_0_idx != NodeIdx::Constant {
-                    adjoints[parent_0_idx.get_idx()] += curr_adjoint * parent_adjoints[0];
+                let parent_0_idx = node.parent_0_idx;
+                if parent_0_idx != CONSTANT_IDX {
+                    adjoints[parent_0_idx as usize] += curr_adjoint * parent_adjoints[0];
                 }
             } else if parent_adjoints.len() == 2 {
                 let curr_adjoint = adjoints[node_idx];
-                let parent_0_idx = node.parent_0_idx.unwrap();
-                let parent_1_idx = node.parent_1_idx.unwrap();
-                if parent_0_idx != NodeIdx::Constant {
-                    adjoints[parent_0_idx.get_idx()] += curr_adjoint * parent_adjoints[0];
+                let parent_0_idx = node.parent_0_idx;
+                let parent_1_idx = node.parent_1_idx;
+                if parent_0_idx != CONSTANT_IDX {
+                    adjoints[parent_0_idx as usize] += curr_adjoint * parent_adjoints[0];
                 }
-                if parent_1_idx != NodeIdx::Constant {
-                    adjoints[parent_1_idx.get_idx()] += curr_adjoint * parent_adjoints[1];
+                if parent_1_idx != CONSTANT_IDX {
+                    adjoints[parent_1_idx as usize] += curr_adjoint * parent_adjoints[1];
                 }
             }
         }
 
-        BackwardsModeGradOutput { adjoints }
+        BackwardsModeGradOutputOpt { adjoints }
     }
     #[inline(always)]
     fn spawn_variable(&self, value: f64) -> adr {
-        let mut nodes = self.nodes.write().expect("error");
-        let mut add_idx = self.add_idx.write().expect("error");
-        let node_idx = *add_idx;
-        let l = nodes.len();
+        let mut nodes = self.nodes.borrow_mut();
+        let node_idx = nodes.len();
 
         let node = ComputationGraphNode {
-            node_idx,
-            node_type: NodeType::Constant,
+            node_type: NodeTypeOpt::Constant,
             value,
-            parent_0: None,
-            parent_1: None,
-            parent_0_idx: None,
-            parent_1_idx: None,
+            parent_0: 0.0,
+            parent_1: 0.0,
+            parent_0_idx: CONSTANT_IDX,
+            parent_1_idx: CONSTANT_IDX,
         };
 
-        if node_idx >= l {
-            nodes.push(node);
-            for _ in 0..100000 {
-                nodes.push(ComputationGraphNode::default());
-            }
-        } else {
-            nodes[node_idx] = node;
+        nodes.push(node);
+
+        adr {
+            value,
+            node_idx: NodeIdxOpt::Idx(node_idx),
         }
-
-        let out = adr {
-            value,
-            node_idx: NodeIdx::Idx(node_idx),
-        };
-
-        *add_idx += 1;
-
-        out
     }
     #[inline(always)]
     fn add_node(
         &self,
-        node_type: NodeType,
+        node_type: NodeTypeOpt,
         value: f64,
         parent_0: Option<f64>,
         parent_1: Option<f64>,
-        parent_0_idx: Option<NodeIdx>,
-        parent_1_idx: Option<NodeIdx>,
+        parent_0_idx: Option<NodeIdxOpt>,
+        parent_1_idx: Option<NodeIdxOpt>,
     ) -> adr {
-        if parent_0_idx.is_some() {
-            if parent_1_idx.is_some() {
-                if parent_0_idx.unwrap() == NodeIdx::Constant
-                    && parent_1_idx.unwrap() == NodeIdx::Constant
-                {
-                    return adr {
-                        value,
-                        node_idx: NodeIdx::Constant,
-                    };
-                }
-            } else {
-                if parent_0_idx.unwrap() == NodeIdx::Constant {
-                    return adr {
-                        value,
-                        node_idx: NodeIdx::Constant,
-                    };
-                }
-            }
-        }
-
-        let mut nodes = self.nodes.write().expect("error");
-        let mut add_idx = self.add_idx.write().expect("error");
-        let node_idx = *add_idx;
-        let l = nodes.len();
-        if node_idx >= l {
-            nodes.push(ComputationGraphNode {
-                node_idx,
-                node_type,
-                value,
-                parent_0,
-                parent_1,
-                parent_0_idx,
-                parent_1_idx,
-            });
-
-            for _ in 0..100000 {
-                nodes.push(ComputationGraphNode::default());
-            }
-        } else {
-            nodes[*add_idx] = ComputationGraphNode {
-                node_idx,
-                node_type,
-                value,
-                parent_0,
-                parent_1,
-                parent_0_idx,
-                parent_1_idx,
-            }
-        }
-
-        let out = adr {
-            value,
-            node_idx: NodeIdx::Idx(node_idx),
+        let p0_idx = match parent_0_idx {
+            None | Some(NodeIdxOpt::Constant) => CONSTANT_IDX,
+            Some(NodeIdxOpt::Idx(i)) => i as u32,
+        };
+        let p1_idx = match parent_1_idx {
+            None | Some(NodeIdxOpt::Constant) => CONSTANT_IDX,
+            Some(NodeIdxOpt::Idx(i)) => i as u32,
         };
 
-        *add_idx += 1;
+        if p0_idx == CONSTANT_IDX && p1_idx == CONSTANT_IDX {
+            return adr {
+                value,
+                node_idx: NodeIdxOpt::Constant,
+            };
+        }
 
-        return out;
+        let mut nodes = self.nodes.borrow_mut();
+        let node_idx = nodes.len();
+
+        nodes.push(ComputationGraphNode {
+            node_type,
+            value,
+            parent_0: parent_0.unwrap_or(0.0),
+            parent_1: parent_1.unwrap_or(0.0),
+            parent_0_idx: p0_idx,
+            parent_1_idx: p1_idx,
+        });
+
+        adr {
+            value,
+            node_idx: NodeIdxOpt::Idx(node_idx),
+        }
     }
 }
 
+pub const CONSTANT_IDX: u32 = u32::MAX;
+
 #[allow(dead_code)]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ComputationGraphNode {
-    node_idx: usize,
-    node_type: NodeType,
-    value: f64,
-    parent_0: Option<f64>,
-    parent_1: Option<f64>,
-    parent_0_idx: Option<NodeIdx>,
-    parent_1_idx: Option<NodeIdx>,
+    pub node_type: NodeTypeOpt,
+    pub parent_0_idx: u32,
+    pub parent_1_idx: u32,
+    pub value: f64,
+    pub parent_0: f64,
+    pub parent_1: f64,
 }
 
 #[derive(Clone, Debug, Copy, Default)]
-pub enum NodeType {
+pub enum NodeTypeOpt {
     #[default]
     Constant,
     Add,
@@ -493,135 +447,135 @@ pub enum NodeType {
     Exp,
     Powf,
 }
-impl NodeType {
+impl NodeTypeOpt {
     fn get_derivatives_wrt_parents(
         &self,
-        parent_0: Option<f64>,
-        parent_1: Option<f64>,
+        parent_0: f64,
+        parent_1: f64,
     ) -> TinyVec<[f64; 2]> {
         return match self {
-            NodeType::Constant => {
+            NodeTypeOpt::Constant => {
                 tiny_vec!([f64; 2])
             }
-            NodeType::Add => {
+            NodeTypeOpt::Add => {
                 tiny_vec!([f64; 2] => 1.0, 1.0)
             }
-            NodeType::Mul => {
-                tiny_vec!([f64; 2] => parent_1.unwrap(), parent_0.unwrap())
+            NodeTypeOpt::Mul => {
+                tiny_vec!([f64; 2] => parent_1, parent_0)
             }
-            NodeType::Sub => {
+            NodeTypeOpt::Sub => {
                 tiny_vec!([f64; 2] => 1.0, -1.0)
             }
-            NodeType::Div => {
-                tiny_vec!([f64; 2] => 1.0/parent_1.unwrap(), -parent_0.unwrap()/(parent_1.unwrap()*parent_1.unwrap()))
+            NodeTypeOpt::Div => {
+                tiny_vec!([f64; 2] => 1.0/parent_1, -parent_0/(parent_1*parent_1))
             }
-            NodeType::Neg => {
+            NodeTypeOpt::Neg => {
                 tiny_vec!([f64; 2] => -1.0)
             }
-            NodeType::Abs => {
-                let val = parent_0.unwrap();
+            NodeTypeOpt::Abs => {
+                let val = parent_0;
                 if val >= 0.0 {
                     tiny_vec!([f64; 2] => 1.0)
                 } else {
                     tiny_vec!([f64; 2] => -1.0)
                 }
             }
-            NodeType::Signum => {
+            NodeTypeOpt::Signum => {
                 tiny_vec!([f64; 2] => 0.0)
             }
-            NodeType::Max => {
-                if parent_0.unwrap() >= parent_1.unwrap() {
+            NodeTypeOpt::Max => {
+                if parent_0 >= parent_1 {
                     tiny_vec!([f64; 2] => 1.0, 0.0)
                 } else {
                     tiny_vec!([f64; 2] => 0.0, 1.0)
                 }
             }
-            NodeType::Min => {
-                if parent_0.unwrap() <= parent_1.unwrap() {
+            NodeTypeOpt::Min => {
+                if parent_0 <= parent_1 {
                     tiny_vec!([f64; 2] => 1.0, 0.0)
                 } else {
                     tiny_vec!([f64; 2] => 0.0, 1.0)
                 }
             }
-            NodeType::Atan2 => {
-                let lhs = parent_0.unwrap();
-                let rhs = parent_1.unwrap();
+            NodeTypeOpt::Atan2 => {
+                let lhs = parent_0;
+                let rhs = parent_1;
                 tiny_vec!([f64; 2] => rhs/(lhs*lhs + rhs*rhs), -lhs/(lhs*lhs + rhs*rhs))
             }
-            NodeType::Floor => {
+            NodeTypeOpt::Floor => {
                 tiny_vec!([f64; 2] => 0.0)
             }
-            NodeType::Ceil => {
+            NodeTypeOpt::Ceil => {
                 tiny_vec!([f64; 2] => 0.0)
             }
-            NodeType::Round => {
+            NodeTypeOpt::Round => {
                 tiny_vec!([f64; 2] => 0.0)
             }
-            NodeType::Trunc => {
+            NodeTypeOpt::Trunc => {
                 tiny_vec!([f64; 2] => 0.0)
             }
-            NodeType::Fract => {
+            NodeTypeOpt::Fract => {
                 tiny_vec!([f64; 2] => 1.0)
             }
-            NodeType::Sin => {
-                tiny_vec!([f64; 2] => ComplexField::cos(parent_0.unwrap()))
+            NodeTypeOpt::Sin => {
+                tiny_vec!([f64; 2] => ComplexField::cos(parent_0))
             }
-            NodeType::Cos => {
-                tiny_vec!([f64; 2] => ComplexField::sin(-parent_0.unwrap()))
+            NodeTypeOpt::Cos => {
+                tiny_vec!([f64; 2] => ComplexField::sin(-parent_0))
             }
-            NodeType::Tan => {
-                let c = ComplexField::cos(parent_0.unwrap());
+            NodeTypeOpt::Tan => {
+                let c = ComplexField::cos(parent_0);
                 tiny_vec!([f64; 2] => 1.0 / (c*c))
             }
-            NodeType::Asin => {
-                tiny_vec!([f64; 2] => 1.0 / ComplexField::sqrt(1.0 - parent_0.unwrap() * parent_0.unwrap()))
+            NodeTypeOpt::Asin => {
+                tiny_vec!([f64; 2] => 1.0 / ComplexField::sqrt(1.0 - parent_0 * parent_0))
             }
-            NodeType::Acos => {
-                tiny_vec!([f64; 2] => -1.0/ComplexField::sqrt(1.0 - parent_0.unwrap() * parent_0.unwrap()))
+            NodeTypeOpt::Acos => {
+                tiny_vec!([f64; 2] => -1.0/ComplexField::sqrt(1.0 - parent_0 * parent_0))
             }
-            NodeType::Atan => {
-                tiny_vec!([f64; 2] => 1.0/(parent_0.unwrap()*parent_0.unwrap() + 1.0))
+            NodeTypeOpt::Atan => {
+                tiny_vec!([f64; 2] => 1.0/(parent_0*parent_0 + 1.0))
             }
-            NodeType::Sinh => {
-                tiny_vec!([f64; 2] => ComplexField::cosh(parent_0.unwrap()))
+            NodeTypeOpt::Sinh => {
+                tiny_vec!([f64; 2] => ComplexField::cosh(parent_0))
             }
-            NodeType::Cosh => {
-                tiny_vec!([f64; 2] => ComplexField::sinh(parent_0.unwrap()))
+            NodeTypeOpt::Cosh => {
+                tiny_vec!([f64; 2] => ComplexField::sinh(parent_0))
             }
-            NodeType::Tanh => {
-                let c = ComplexField::cosh(parent_0.unwrap());
+            NodeTypeOpt::Tanh => {
+                let c = ComplexField::cosh(parent_0);
                 tiny_vec!([f64; 2] => 1.0 / (c*c))
             }
-            NodeType::Asinh => {
-                let lhs = parent_0.unwrap();
+            NodeTypeOpt::Asinh => {
+                let lhs = parent_0;
                 tiny_vec!([f64; 2] => 1.0/(lhs*lhs + 1.0).sqrt())
             }
-            NodeType::Acosh => {
-                let lhs = parent_0.unwrap();
+            NodeTypeOpt::Acosh => {
+                let lhs = parent_0;
                 tiny_vec!([f64; 2] => 1.0/(ComplexField::sqrt(lhs*lhs - 1.0)) )
             }
-            NodeType::Atanh => {
-                let lhs = parent_0.unwrap();
+            NodeTypeOpt::Atanh => {
+                let lhs = parent_0;
                 tiny_vec!([f64; 2] => 1.0/(1.0 - lhs*lhs))
             }
-            NodeType::Log => {
-                let lhs = parent_0.unwrap();
-                let rhs = parent_1.unwrap();
+            NodeTypeOpt::Log => {
+                let lhs = parent_0;
+                let rhs = parent_1;
                 let ln_rhs = ComplexField::ln(rhs);
                 let ln_lhs = ComplexField::ln(lhs);
                 tiny_vec!([f64; 2] => 1.0/(lhs * ln_rhs), -ln_lhs / (rhs * ln_rhs * ln_rhs))
             }
-            NodeType::Sqrt => {
-                let lhs = parent_0.unwrap();
+            NodeTypeOpt::Sqrt => {
+                let lhs = parent_0;
                 let tmp = if lhs == 0.0 { 0.0001 } else { lhs };
                 tiny_vec!([f64; 2] => 1.0/(2.0*ComplexField::sqrt(tmp)))
             }
-            NodeType::Exp => {
-                tiny_vec!([f64; 2] => ComplexField::exp(parent_0.unwrap()))
+            NodeTypeOpt::Exp => {
+                tiny_vec!([f64; 2] => ComplexField::exp(parent_0))
             }
-            NodeType::Powf => {
-                let lhs = parent_0.unwrap();
-                let rhs = parent_1.unwrap();
+            NodeTypeOpt::Powf => {
+                let lhs = parent_0;
+                let rhs = parent_1;
                 let tmp = if lhs == 0.0 { 0.0001 } else { lhs };
                 tiny_vec!([f64; 2] => rhs * ComplexField::powf(lhs, rhs - 1.0), ComplexField::powf(lhs, rhs) * ComplexField::ln(tmp))
             }
@@ -630,50 +584,50 @@ impl NodeType {
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
-pub enum NodeIdx {
+pub enum NodeIdxOpt {
     Constant,
     Idx(usize),
 }
-impl NodeIdx {
+impl NodeIdxOpt {
     #[inline]
     pub fn get_idx(&self) -> usize {
         match self {
-            NodeIdx::Constant => {
+            NodeIdxOpt::Constant => {
                 panic!("cannot get idx from constant.")
             }
-            NodeIdx::Idx(idx) => return *idx,
+            NodeIdxOpt::Idx(idx) => return *idx,
         }
     }
 }
 
 thread_local! {
-    static GRAPH: ComputationGraph = ComputationGraph::new_preallocated(100_000);
+    static GRAPH_OPT: ComputationGraphOpt = ComputationGraphOpt::new_preallocated(100_000);
 }
 
 pub struct GlobalComputationGraph;
 impl GlobalComputationGraph {
     pub fn reset(&self) {
-        GRAPH.with(|g| g.reset())
+        GRAPH_OPT.with(|g| g.reset())
     }
     pub fn spawn_value(&self, value: f64) -> adr {
-        GRAPH.with(|g| g.spawn_variable(value))
+        GRAPH_OPT.with(|g| g.spawn_variable(value))
     }
     pub fn get() -> GlobalComputationGraph {
         GlobalComputationGraph
     }
     pub fn num_nodes(&self) -> usize {
-        GRAPH.with(|g| *g.add_idx.read().unwrap())
+        GRAPH_OPT.with(|g| g.nodes.borrow().len())
     }
     pub fn add_node(
         &self,
-        node_type: NodeType,
+        node_type: NodeTypeOpt,
         value: f64,
         parent_0: Option<f64>,
         parent_1: Option<f64>,
-        parent_0_idx: Option<NodeIdx>,
-        parent_1_idx: Option<NodeIdx>,
+        parent_0_idx: Option<NodeIdxOpt>,
+        parent_1_idx: Option<NodeIdxOpt>,
     ) -> adr {
-        GRAPH.with(|g| {
+        GRAPH_OPT.with(|g| {
             g.add_node(
                 node_type,
                 value,
@@ -684,8 +638,8 @@ impl GlobalComputationGraph {
             )
         })
     }
-    pub fn get_backwards_mode_grad(&self, node_idx: NodeIdx) -> BackwardsModeGradOutput {
-        GRAPH.with(|g| g.get_backwards_mode_grad(node_idx))
+    pub fn get_backwards_mode_grad(&self, node_idx: NodeIdxOpt) -> BackwardsModeGradOutputOpt {
+        GRAPH_OPT.with(|g| g.get_backwards_mode_grad(node_idx))
     }
 }
 
@@ -780,7 +734,7 @@ impl Add<Self> for adr {
     fn add(self, rhs: Self) -> Self::Output {
         let out_value = self.value() + rhs.value();
         GlobalComputationGraph::get().add_node(
-            NodeType::Add,
+            NodeTypeOpt::Add,
             out_value,
             Some(self.value()),
             Some(rhs.value()),
@@ -803,7 +757,7 @@ impl Mul<Self> for adr {
     fn mul(self, rhs: Self) -> Self::Output {
         let out_value = self.value() * rhs.value();
         GlobalComputationGraph::get().add_node(
-            NodeType::Mul,
+            NodeTypeOpt::Mul,
             out_value,
             Some(self.value()),
             Some(rhs.value()),
@@ -826,7 +780,7 @@ impl Sub<Self> for adr {
     fn sub(self, rhs: Self) -> Self::Output {
         let out_value = self.value() - rhs.value();
         GlobalComputationGraph::get().add_node(
-            NodeType::Sub,
+            NodeTypeOpt::Sub,
             out_value,
             Some(self.value()),
             Some(rhs.value()),
@@ -849,7 +803,7 @@ impl Div<Self> for adr {
     fn div(self, rhs: Self) -> Self::Output {
         let out_value = self.value() / rhs.value();
         GlobalComputationGraph::get().add_node(
-            NodeType::Div,
+            NodeTypeOpt::Div,
             out_value,
             Some(self.value()),
             Some(rhs.value()),
@@ -887,7 +841,7 @@ impl Neg for adr {
     fn neg(self) -> Self::Output {
         let out_value = self.value().neg();
         GlobalComputationGraph::get().add_node(
-            NodeType::Neg,
+            NodeTypeOpt::Neg,
             out_value,
             Some(self.value()),
             None,
@@ -1365,7 +1319,7 @@ impl Signed for adr {
     fn abs(&self) -> Self {
         let out_value = self.value().abs();
         GlobalComputationGraph::get().add_node(
-            NodeType::Abs,
+            NodeTypeOpt::Abs,
             out_value,
             Some(self.value()),
             None,
@@ -1385,7 +1339,7 @@ impl Signed for adr {
     fn signum(&self) -> Self {
         let out_value = self.value().signum();
         GlobalComputationGraph::get().add_node(
-            NodeType::Signum,
+            NodeTypeOpt::Signum,
             out_value,
             Some(self.value()),
             None,
@@ -1446,7 +1400,7 @@ impl RealField for adr {
     fn max(self, other: Self) -> Self {
         let out_value = self.value().max(other.value());
         GlobalComputationGraph::get().add_node(
-            NodeType::Max,
+            NodeTypeOpt::Max,
             out_value,
             Some(self.value()),
             Some(other.value()),
@@ -1459,7 +1413,7 @@ impl RealField for adr {
     fn min(self, other: Self) -> Self {
         let out_value = self.value().min(other.value());
         GlobalComputationGraph::get().add_node(
-            NodeType::Min,
+            NodeTypeOpt::Min,
             out_value,
             Some(self.value()),
             Some(other.value()),
@@ -1478,7 +1432,7 @@ impl RealField for adr {
     fn atan2(self, other: Self) -> Self {
         let out_value = self.value().atan2(other.value());
         GlobalComputationGraph::get().add_node(
-            NodeType::Atan2,
+            NodeTypeOpt::Atan2,
             out_value,
             Some(self.value()),
             Some(other.value()),
@@ -1616,7 +1570,7 @@ impl ComplexField for adr {
     fn floor(self) -> Self {
         let out_value = self.value().floor();
         GlobalComputationGraph::get().add_node(
-            NodeType::Floor,
+            NodeTypeOpt::Floor,
             out_value,
             Some(self.value()),
             None,
@@ -1629,7 +1583,7 @@ impl ComplexField for adr {
     fn ceil(self) -> Self {
         let out_value = self.value().ceil();
         GlobalComputationGraph::get().add_node(
-            NodeType::Ceil,
+            NodeTypeOpt::Ceil,
             out_value,
             Some(self.value()),
             None,
@@ -1642,7 +1596,7 @@ impl ComplexField for adr {
     fn round(self) -> Self {
         let out_value = self.value().round();
         GlobalComputationGraph::get().add_node(
-            NodeType::Round,
+            NodeTypeOpt::Round,
             out_value,
             Some(self.value()),
             None,
@@ -1655,7 +1609,7 @@ impl ComplexField for adr {
     fn trunc(self) -> Self {
         let out_value = self.value().trunc();
         GlobalComputationGraph::get().add_node(
-            NodeType::Trunc,
+            NodeTypeOpt::Trunc,
             out_value,
             Some(self.value()),
             None,
@@ -1668,7 +1622,7 @@ impl ComplexField for adr {
     fn fract(self) -> Self {
         let out_value = self.value().fract();
         GlobalComputationGraph::get().add_node(
-            NodeType::Fract,
+            NodeTypeOpt::Fract,
             out_value,
             Some(self.value()),
             None,
@@ -1706,7 +1660,7 @@ impl ComplexField for adr {
     fn sin(self) -> Self {
         let out_value = self.value().sin();
         GlobalComputationGraph::get().add_node(
-            NodeType::Sin,
+            NodeTypeOpt::Sin,
             out_value,
             Some(self.value()),
             None,
@@ -1719,7 +1673,7 @@ impl ComplexField for adr {
     fn cos(self) -> Self {
         let out_value = self.value().cos();
         GlobalComputationGraph::get().add_node(
-            NodeType::Cos,
+            NodeTypeOpt::Cos,
             out_value,
             Some(self.value()),
             None,
@@ -1737,7 +1691,7 @@ impl ComplexField for adr {
     fn tan(self) -> Self {
         let out_value = self.value().tan();
         GlobalComputationGraph::get().add_node(
-            NodeType::Tan,
+            NodeTypeOpt::Tan,
             out_value,
             Some(self.value()),
             None,
@@ -1750,7 +1704,7 @@ impl ComplexField for adr {
     fn asin(self) -> Self {
         let out_value = self.value().asin();
         GlobalComputationGraph::get().add_node(
-            NodeType::Asin,
+            NodeTypeOpt::Asin,
             out_value,
             Some(self.value()),
             None,
@@ -1763,7 +1717,7 @@ impl ComplexField for adr {
     fn acos(self) -> Self {
         let out_value = self.value().acos();
         GlobalComputationGraph::get().add_node(
-            NodeType::Acos,
+            NodeTypeOpt::Acos,
             out_value,
             Some(self.value()),
             None,
@@ -1776,7 +1730,7 @@ impl ComplexField for adr {
     fn atan(self) -> Self {
         let out_value = self.value().atan();
         GlobalComputationGraph::get().add_node(
-            NodeType::Atan,
+            NodeTypeOpt::Atan,
             out_value,
             Some(self.value()),
             None,
@@ -1789,7 +1743,7 @@ impl ComplexField for adr {
     fn sinh(self) -> Self {
         let out_value = self.value().sinh();
         GlobalComputationGraph::get().add_node(
-            NodeType::Sinh,
+            NodeTypeOpt::Sinh,
             out_value,
             Some(self.value()),
             None,
@@ -1802,7 +1756,7 @@ impl ComplexField for adr {
     fn cosh(self) -> Self {
         let out_value = self.value().cosh();
         GlobalComputationGraph::get().add_node(
-            NodeType::Cosh,
+            NodeTypeOpt::Cosh,
             out_value,
             Some(self.value()),
             None,
@@ -1815,7 +1769,7 @@ impl ComplexField for adr {
     fn tanh(self) -> Self {
         let out_value = self.value().tanh();
         GlobalComputationGraph::get().add_node(
-            NodeType::Tanh,
+            NodeTypeOpt::Tanh,
             out_value,
             Some(self.value()),
             None,
@@ -1828,7 +1782,7 @@ impl ComplexField for adr {
     fn asinh(self) -> Self {
         let out_value = self.value().asinh();
         GlobalComputationGraph::get().add_node(
-            NodeType::Asinh,
+            NodeTypeOpt::Asinh,
             out_value,
             Some(self.value()),
             None,
@@ -1841,7 +1795,7 @@ impl ComplexField for adr {
     fn acosh(self) -> Self {
         let out_value = self.value().acosh();
         GlobalComputationGraph::get().add_node(
-            NodeType::Acosh,
+            NodeTypeOpt::Acosh,
             out_value,
             Some(self.value()),
             None,
@@ -1854,7 +1808,7 @@ impl ComplexField for adr {
     fn atanh(self) -> Self {
         let out_value = self.value().atanh();
         GlobalComputationGraph::get().add_node(
-            NodeType::Atanh,
+            NodeTypeOpt::Atanh,
             out_value,
             Some(self.value()),
             None,
@@ -1867,7 +1821,7 @@ impl ComplexField for adr {
     fn log(self, base: Self::RealField) -> Self {
         let out_value = self.value().log(base.value());
         GlobalComputationGraph::get().add_node(
-            NodeType::Log,
+            NodeTypeOpt::Log,
             out_value,
             Some(self.value()),
             Some(base.value()),
@@ -1900,7 +1854,7 @@ impl ComplexField for adr {
     fn sqrt(self) -> Self {
         let out_value = self.value().sqrt();
         GlobalComputationGraph::get().add_node(
-            NodeType::Sqrt,
+            NodeTypeOpt::Sqrt,
             out_value,
             Some(self.value()),
             None,
@@ -1913,7 +1867,7 @@ impl ComplexField for adr {
     fn exp(self) -> Self {
         let out_value = self.value().exp();
         GlobalComputationGraph::get().add_node(
-            NodeType::Exp,
+            NodeTypeOpt::Exp,
             out_value,
             Some(self.value()),
             None,
@@ -1941,7 +1895,7 @@ impl ComplexField for adr {
     fn powf(self, n: Self::RealField) -> Self {
         let out_value = self.value().powf(n.value());
         GlobalComputationGraph::get().add_node(
-            NodeType::Powf,
+            NodeTypeOpt::Powf,
             out_value,
             Some(self.value()),
             Some(n.value()),

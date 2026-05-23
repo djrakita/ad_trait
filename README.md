@@ -123,6 +123,29 @@ fn main() {
 
 ## Changelog
 
+### [0.3.1]
+- **Performance Optimizations**: Dramatically improved execution speeds for Reverse AD, Forward AD, and Hessian AD (`HessianAD_FOR` mode) without any breaking API changes.
+- **Optimized Reverse AD (`adr`)**: Reduced computation graph node size by 55% (from 88 to 40 bytes) and replaced thread-local `RwLock` operations with zero-overhead `RefCell`/`Cell` structures.
+- **Optimized Forward AD (`adf`)**: Eliminated heap allocations during SIMD multi-tangent operations in favor of stack arrays, allowing the compiler to autovectorize calculations directly into hardware registers.
+- **Accelerated Hessian AD (`HessianAD_FOR`)**: Sped up Forward-over-Reverse Hessian computations by utilizing the optimized reverse AD engine.
+- **Stable Forward AD (`adfn`)**: Confirmed that `adfn` runs entirely on stable Rust (no nightly compiler required). Because `adfn` uses stack-allocated arrays `[f64; N]`, it was already zero-allocation and did not require changes.
+
+#### Performance Benchmarks (Macbook Air M3)
+
+| AD Mode | Function | Iterations | Original Time | Optimized Time | Speedup Factor |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Reverse AD** | Rosenbrock (10 inputs) | 100,000 | 118.36 ms | 81.55 ms | **1.45x** |
+| **Reverse AD** | Polynomial (1 input) | 1,000,000 | 94.10 ms | 60.44 ms | **1.56x** |
+| **Reverse AD** | Multivariate (2 inputs) | 1,000,000 | 152.50 ms | 103.57 ms | **1.47x** |
+| **Forward AD** | Math Heavy (`f64x8`) | 1,000,000 | 1.12 s | 529.49 ms | **2.12x** |
+| **Hessian AD** ($N=1$) | Rosenbrock (10 inputs) | 1,000 | 66.67 ms | 49.20 ms | **1.36x** |
+| **Hessian AD** ($N=2$) | Rosenbrock (10 inputs) | 1,000 | 57.76 ms | 40.97 ms | **1.41x** |
+| **Hessian AD** ($N=5$) | Rosenbrock (10 inputs) | 1,000 | 55.85 ms | 41.38 ms | **1.35x** |
+| **Hessian AD** ($N=10$)| Rosenbrock (10 inputs) | 1,000 | 69.88 ms | 48.03 ms | **1.46x** |
+| **Hessian AD** ($N=1$) | Polynomial (1 input) | 10,000 | 6.13 ms | 5.49 ms | **1.12x** |
+| **Hessian AD** ($N=1$) | Multivariate (2 inputs)| 10,000 | 11.89 ms | 9.89 ms | **1.20x** |
+| **Hessian AD** ($N=2$) | Multivariate (2 inputs)| 10,000 | 10.64 ms | 8.65 ms | **1.23x** |
+
 ### [0.3.0]
 - **Second-Order AD**: Added full support for computing Hessians via recursive dual types.
 - **New AD Modes**:

@@ -65,24 +65,24 @@ macro_rules! make_adf {
 
             #[inline(always)]
             fn two_vecs_mul_and_add_with_nan_check(vec1: &$t, vec2: &$t, scalar1: $v, scalar2: $v) -> $t {
-                let mut out_vec = vec![];
+                let mut out_arr = [0.0 as $v; $a];
 
                 for i in 0..$a {
-                    out_vec.push( Self::mul_with_nan_check(vec1.as_array()[i], scalar1) + Self::mul_with_nan_check(vec2.as_array()[i], scalar2) );
+                    out_arr[i] = Self::mul_with_nan_check(vec1.as_array()[i], scalar1) + Self::mul_with_nan_check(vec2.as_array()[i], scalar2);
                 }
 
-                $t::from_slice(&out_vec)
+                $t::from_array(out_arr)
             }
 
             #[inline(always)]
             fn one_vec_mul_with_nan_check(vec: &$t, scalar: $v) -> $t {
-                let mut out_vec = vec![];
+                let mut out_arr = [0.0 as $v; $a];
 
                 for i in 0..$a {
-                    out_vec.push( Self::mul_with_nan_check(vec.as_array()[i], scalar) );
+                    out_arr[i] = Self::mul_with_nan_check(vec.as_array()[i], scalar);
                 }
 
-                $t::from_slice(&out_vec)
+                $t::from_array(out_arr)
             }
         }
 
@@ -1373,7 +1373,7 @@ macro_rules! make_adf {
                 let output_value = self.value.sqrt();
                 let tmp = if self.value == 0.0 { 0.0001 } else { self.value };
                 let d_sqrt_d_arg1 =  (1.0/(2.0*tmp.sqrt())) as $v;
-                let output_tangent = $t::one_vec_mul_with_nan_check(&self.tangent, d_sqrt_d_arg1);
+                let output_tangent = $s::one_vec_mul_with_nan_check(&self.tangent, d_sqrt_d_arg1);
 
                 Self {
                     value: output_value,
@@ -1577,17 +1577,17 @@ macro_rules! make_adf {
 }
 
 
-make_adf!(f32x1,  f32, adf_f32x1,   1, AdfVisitorf32x1,  "adf_f32x1");
-make_adf!(f32x2,  f32, adf_f32x2,   2, AdfVisitorf32x2,  "adf_f32x2");
-make_adf!(f32x4,  f32, adf_f32x4,   4, AdfVisitorf32x4,  "adf_f32x4");
-make_adf!(f32x8,  f32, adf_f32x8,   8, AdfVisitorf32x8,  "adf_f32x8");
-make_adf!(f32x16, f32, adf_f32x16, 16, AdfVisitorf32x16, "adf_f32x16");
-make_adf!(f32x32, f32, adf_f32x32, 32, AdfVisitorf32x32, "adf_f32x32");
-make_adf!(f32x64, f32, adf_f32x64, 64, AdfVisitorf32x64, "adf_f32x64");
-make_adf!(f64x1,  f64, adf_f64x1,   1, AdfVisitorf64x1,  "adf_f64x1");
-make_adf!(f64x2,  f64, adf_f64x2,   2, AdfVisitorf64x2,  "adf_f64x2");
-make_adf!(f64x4,  f64, adf_f64x4,   4, AdfVisitorf64x4,  "adf_f64x4");
-make_adf!(f64x8,  f64, adf_f64x8,   8, AdfVisitorf64x8,  "adf_f64x8");
-make_adf!(f64x16, f64, adf_f64x16, 16, AdfVisitorf64x16, "adf_f64x16");
-make_adf!(f64x32, f64, adf_f64x32, 32, AdfVisitorf64x32, "adf_f64x32");
-make_adf!(f64x64, f64, adf_f64x64, 64, AdfVisitorf64x64, "adf_f64x64");
+make_adf!(f32x1,  f32, adf_f32x1,   1, AdfOptVisitorf32x1,  "adf_f32x1");
+make_adf!(f32x2,  f32, adf_f32x2,   2, AdfOptVisitorf32x2,  "adf_f32x2");
+make_adf!(f32x4,  f32, adf_f32x4,   4, AdfOptVisitorf32x4,  "adf_f32x4");
+make_adf!(f32x8,  f32, adf_f32x8,   8, AdfOptVisitorf32x8,  "adf_f32x8");
+make_adf!(f32x16, f32, adf_f32x16, 16, AdfOptVisitorf32x16, "adf_f32x16");
+make_adf!(f32x32, f32, adf_f32x32, 32, AdfOptVisitorf32x32, "adf_f32x32");
+make_adf!(f32x64, f32, adf_f32x64, 64, AdfOptVisitorf32x64, "adf_f32x64");
+make_adf!(f64x1,  f64, adf_f64x1,   1, AdfOptVisitorf64x1,  "adf_f64x1");
+make_adf!(f64x2,  f64, adf_f64x2,   2, AdfOptVisitorf64x2,  "adf_f64x2");
+make_adf!(f64x4,  f64, adf_f64x4,   4, AdfOptVisitorf64x4,  "adf_f64x4");
+make_adf!(f64x8,  f64, adf_f64x8,   8, AdfOptVisitorf64x8,  "adf_f64x8");
+make_adf!(f64x16, f64, adf_f64x16, 16, AdfOptVisitorf64x16, "adf_f64x16");
+make_adf!(f64x32, f64, adf_f64x32, 32, AdfOptVisitorf64x32, "adf_f64x32");
+make_adf!(f64x64, f64, adf_f64x64, 64, AdfOptVisitorf64x64, "adf_f64x64");
